@@ -3,8 +3,16 @@ package freskog.effects.rabbitmq
 import java.io.IOException
 
 import com.rabbitmq.client.AMQP.Confirm
-import com.rabbitmq.client.{Channel, ConfirmListener, Connection, ConnectionFactory, GetResponse, ShutdownListener, Consumer => RConsumer}
-import scalaz.zio.{ZIO, ZManaged}
+import com.rabbitmq.client.{
+  Channel,
+  ConfirmListener,
+  Connection,
+  ConnectionFactory,
+  GetResponse,
+  ShutdownListener,
+  Consumer => RConsumer
+}
+import scalaz.zio.{ ZIO, ZManaged }
 
 package object admin {
 
@@ -50,7 +58,7 @@ package object admin {
   def addConfirmListener(channel: Channel, listener: ConfirmListener): ZIO[AdminClient, Nothing, Unit] =
     ZIO.accessM[AdminClient](_.adminClient.addConfirmListener(channel, listener))
 
-  def addShutdownListener(channel:Channel, listener: ShutdownListener):ZIO[AdminClient, Nothing, Unit] =
+  def addShutdownListener(channel: Channel, listener: ShutdownListener): ZIO[AdminClient, Nothing, Unit] =
     ZIO.accessM[AdminClient](_.adminClient.addShutdownListener(channel, listener))
 
   def confirmSelect(channel: Channel): ZIO[AdminClient, IOException, Confirm.SelectOk] =

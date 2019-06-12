@@ -4,10 +4,18 @@ import java.io.IOException
 
 import com.rabbitmq.client.AMQP.Confirm
 import com.rabbitmq.client.BuiltinExchangeType.FANOUT
-import com.rabbitmq.client.{Channel, ConfirmListener, Connection, ConnectionFactory, GetResponse, ShutdownListener, Consumer => RConsumer}
+import com.rabbitmq.client.{
+  Channel,
+  ConfirmListener,
+  Connection,
+  ConnectionFactory,
+  GetResponse,
+  ShutdownListener,
+  Consumer => RConsumer
+}
 import freskog.effects.rabbitmq._
 import freskog.effects.rabbitmq.consumer.Consumer.untilNonNull
-import freskog.effects.rabbitmq.publisher.Publisher.{emptyProps, noKey}
+import freskog.effects.rabbitmq.publisher.Publisher.{ emptyProps, noKey }
 import scalaz.zio._
 import scalaz.zio.blocking._
 import scalaz.zio.clock._
@@ -33,7 +41,7 @@ object AdminClient extends Serializable {
 
     def bindQueueToFanout(channel: Channel, queue: AmqpQueue, exchangeName: FanoutExchange): ZIO[Any, IOException, Unit]
 
-    def basicGet(channel: Channel, queueName:String): ZIO[Any, IOException, GetResponse]
+    def basicGet(channel: Channel, queueName: String): ZIO[Any, IOException, GetResponse]
 
     def basicAck(channel: Channel, deliveryTag: Long, multiple: Boolean): ZIO[Any, IOException, Unit]
 
@@ -47,7 +55,7 @@ object AdminClient extends Serializable {
 
     def addConfirmListener(channel: Channel, listener: ConfirmListener): ZIO[Any, Nothing, Unit]
 
-    def addShutdownListener(channel:Channel, listener: ShutdownListener):ZIO[Any, Nothing, Unit]
+    def addShutdownListener(channel: Channel, listener: ShutdownListener): ZIO[Any, Nothing, Unit]
 
     def confirmSelect(channel: Channel): ZIO[Any, IOException, Confirm.SelectOk]
 
@@ -91,7 +99,12 @@ object AdminClient extends Serializable {
         override def basicAck(channel: Channel, deliveryTag: Long, multiple: Boolean): ZIO[Any, IOException, Unit] =
           self.basicAck(channel, deliveryTag, multiple).provide(env)
 
-        override def basicConsume(channel: Channel, queue: String, autoAck: Boolean, callback: RConsumer): ZIO[Any, IOException, String] =
+        override def basicConsume(
+          channel: Channel,
+          queue: String,
+          autoAck: Boolean,
+          callback: RConsumer
+        ): ZIO[Any, IOException, String] =
           self.basicConsume(channel, queue, autoAck, callback).provide(env)
 
         override def basicNack(channel: Channel, deliveryTag: Long, multiple: Boolean, requeue: Boolean): ZIO[Any, IOException, Unit] =
@@ -106,7 +119,7 @@ object AdminClient extends Serializable {
         override def addConfirmListener(channel: Channel, listener: ConfirmListener): ZIO[Any, Nothing, Unit] =
           self.addConfirmListener(channel, listener).provide(env)
 
-        override def addShutdownListener(channel:Channel, listener: ShutdownListener):ZIO[Any, Nothing, Unit] =
+        override def addShutdownListener(channel: Channel, listener: ShutdownListener): ZIO[Any, Nothing, Unit] =
           self.addShutdownListener(channel, listener)
 
         override def confirmSelect(channel: Channel): ZIO[Any, IOException, Confirm.SelectOk] =
@@ -142,18 +155,18 @@ object AdminClient extends Serializable {
   def newConnection(name: String, connectionFactory: ConnectionFactory): Task[Connection] =
     ZIO.effect(connectionFactory.newConnection(name))
 
-
   def declareFanoutExchange(channel: Channel, name: String): ZIO[Any, IOException, FanoutExchange] =
     ZIO.effect(channel.exchangeDeclare(name, FANOUT)).refineOrDie(convertToIOException) *> ZIO.succeed(FanoutExchange(name))
 
   def declareQueue(channel: Channel, name: String): ZIO[Any, IOException, AmqpQueue] =
-    ZIO.effect(channel.queueDeclare(name, false, false, false, Map.empty[String,AnyRef].asJava))
+    ZIO
+      .effect(channel.queueDeclare(name, false, false, false, Map.empty[String, AnyRef].asJava))
       .refineOrDie(convertToIOException) *> ZIO.succeed(AmqpQueue(name))
 
   def bindQueueToFanout(channel: Channel, queue: AmqpQueue, fanout: FanoutExchange): ZIO[Any, IOException, Unit] =
     ZIO.effect(channel.queueBind(queue.name, fanout.name, "")).refineOrDie(convertToIOException).unit
 
-  def basicGet(channel: Channel, queueName:String): ZIO[Blocking with Clock, IOException, GetResponse] =
+  def basicGet(channel: Channel, queueName: String): ZIO[Blocking with Clock, IOException, GetResponse] =
     effectBlocking(channel.basicGet(queueName, false)).refineOrDie(convertToIOException).repeat(untilNonNull)
 
   def basicAck(channel: Channel, deliveryTag: Long, multiple: Boolean): ZIO[Any, IOException, Unit] =
@@ -174,7 +187,7 @@ object AdminClient extends Serializable {
   def addConfirmListener(channel: Channel, listener: ConfirmListener): ZIO[Any, Nothing, Unit] =
     ZIO.effectTotal(channel.addConfirmListener(listener))
 
-  def addShutdownListener(channel:Channel, listener:ShutdownListener): ZIO[Any, Nothing, Unit] =
+  def addShutdownListener(channel: Channel, listener: ShutdownListener): ZIO[Any, Nothing, Unit] =
     ZIO.effectTotal(channel.addShutdownListener(listener))
 
   def confirmSelect(channel: Channel): ZIO[Any, IOException, Confirm.SelectOk] =

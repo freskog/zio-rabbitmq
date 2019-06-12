@@ -1,7 +1,7 @@
 package freskog.effects.app
 
 import freskog.effects.calculator.ResultEvent
-import scalaz.zio.{UIO, ZIO}
+import scalaz.zio.{ UIO, ZIO }
 
 package object services {
 

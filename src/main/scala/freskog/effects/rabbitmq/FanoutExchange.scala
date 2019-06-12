@@ -1,4 +1,3 @@
-
 package freskog.effects.rabbitmq
 
-case class FanoutExchange(name:String)
+case class FanoutExchange(name: String)

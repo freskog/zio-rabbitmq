@@ -3,9 +3,9 @@ package freskog.effects.rabbitmq
 import java.io.IOException
 import java.util.concurrent.TimeUnit
 
-import scalaz.zio.console.{Console, putStrLn}
+import scalaz.zio.console.{ putStrLn, Console }
 import scalaz.zio.duration.Duration
-import scalaz.zio.{Exit, Schedule, UIO, ZSchedule}
+import scalaz.zio.{ Exit, Schedule, UIO, ZSchedule }
 
 object Schedules {
 
@@ -19,17 +19,16 @@ object Schedules {
 
   def logBefore(component: String): Schedule[Exit.Cause[IOException], Exit.Cause[IOException]] =
     logInput[Any, Exit.Cause[IOException]] {
-      case c if c.died => printErrMsg(s"$component unexpectedly died, full trace is ${c.prettyPrint}")
-      case c if c.failed => printErrMsg(s"$component encountered failure ${c.squash}")
-      case c if c.interrupted => printErrMsg( s"$component was interrupted")
-      case c => printErrMsg(s"$component terminated with unknown cause, full trace is ${c.prettyPrint}")
+      case c if c.died        => printErrMsg(s"$component unexpectedly died, full trace is ${c.prettyPrint}")
+      case c if c.failed      => printErrMsg(s"$component encountered failure ${c.squash}")
+      case c if c.interrupted => printErrMsg(s"$component was interrupted")
+      case c                  => printErrMsg(s"$component terminated with unknown cause, full trace is ${c.prettyPrint}")
     }
 
   def logAfter(name: String): ((Duration, Int)) => UIO[Unit] = {
     case (d, n) => putStrLn(s"Offset ${d.asScala.toCoarsest}, attempting restart of $name (retry #$n)").provide(Console.Live)
   }
 
-
-  def printErrMsg(str:String):UIO[Unit] =
+  def printErrMsg(str: String): UIO[Unit] =
     putStrLn(str).provide(Console.Live)
 }

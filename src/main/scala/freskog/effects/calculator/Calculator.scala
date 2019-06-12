@@ -1,6 +1,6 @@
 package freskog.effects.calculator
 
-import scalaz.zio.{Ref, ZIO}
+import scalaz.zio.{ Ref, ZIO }
 
 trait Calculator extends Serializable {
   val calculator: Calculator.Service[Any]
@@ -16,7 +16,7 @@ object Calculator extends Serializable {
     override val calculator: Service[Any] =
       new Service[Any] {
         override def incrementByOne(state: Ref[Int]): ZIO[Any, Nothing, ResultEvent] =
-          state.modify( current => (IncrementedTo(current + 1), current + 1))
+          state.modify(current => (IncrementedTo(current + 1), current + 1))
 
         override def computeCurrentValue(state: Ref[Int]): ZIO[Any, Nothing, ResultEvent] =
           state.get.map(ComputedTotal)

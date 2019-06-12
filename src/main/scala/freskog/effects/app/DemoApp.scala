@@ -4,11 +4,11 @@ import java.io.IOException
 
 import freskog.effects.app.services.{ CalculatorInput, RabbitTopology, ResultPrinter }
 import freskog.effects.calculator.Calculator
+import freskog.effects.rabbitmq.Schedules
 import freskog.effects.rabbitmq.admin.AdminClient
 import freskog.effects.rabbitmq.consumer.Consumer
 import freskog.effects.rabbitmq.publisher.Publisher
 import freskog.effects.rabbitmq.topology.TopologyClient
-import freskog.effects.rabbitmq.{ printErrMsg, Schedules }
 import scalaz.zio._
 
 object DemoApp extends App {

@@ -3,7 +3,7 @@ package freskog.effects
 import java.io.IOException
 
 import com.rabbitmq.client.ShutdownSignalException
-import scalaz.zio.{ZIO, console}
+import scalaz.zio.{ console, ZIO }
 
 import scala.concurrent.TimeoutException
 
@@ -17,6 +17,5 @@ package object rabbitmq {
 
   def printErrMsg(t: Throwable): ZIO[Any, Nothing, Unit] =
     console.putStrLn(s"error occurred in finalizer: $t").provide(console.Console.Live)
-
 
 }
