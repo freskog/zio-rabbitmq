@@ -4,15 +4,7 @@ import java.io.IOException
 
 import com.rabbitmq.client.AMQP.Confirm
 import com.rabbitmq.client.BuiltinExchangeType.FANOUT
-import com.rabbitmq.client.{
-  Channel,
-  ConfirmListener,
-  Connection,
-  ConnectionFactory,
-  GetResponse,
-  ShutdownListener,
-  Consumer => RConsumer
-}
+import com.rabbitmq.client.{ Channel, ConfirmListener, Connection, ConnectionFactory, GetResponse, ShutdownListener, Consumer => RConsumer }
 import freskog.effects.rabbitmq._
 import freskog.effects.rabbitmq.consumer.Consumer.untilNonNull
 import freskog.effects.rabbitmq.publisher.Publisher.{ emptyProps, noKey }

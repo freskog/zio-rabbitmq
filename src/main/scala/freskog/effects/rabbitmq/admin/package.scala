@@ -3,15 +3,7 @@ package freskog.effects.rabbitmq
 import java.io.IOException
 
 import com.rabbitmq.client.AMQP.Confirm
-import com.rabbitmq.client.{
-  Channel,
-  ConfirmListener,
-  Connection,
-  ConnectionFactory,
-  GetResponse,
-  ShutdownListener,
-  Consumer => RConsumer
-}
+import com.rabbitmq.client.{ Channel, ConfirmListener, Connection, ConnectionFactory, GetResponse, ShutdownListener, Consumer => RConsumer }
 import scalaz.zio.{ ZIO, ZManaged }
 
 package object admin {

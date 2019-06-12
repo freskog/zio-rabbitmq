@@ -31,10 +31,7 @@ object Publisher extends Serializable {
         override def publishTo(exchange: String, topology: Declaration): ZIO[Any, Nothing, String => UIO[Unit]] =
           self.publishTo(exchange, topology).provide(env)
 
-        override def publishConfirmsTo(
-          exchange: String,
-          topology: Declaration
-        ): ZIO[Any, Nothing, String => ZIO[Any, IOException, Unit]] =
+        override def publishConfirmsTo(exchange: String, topology: Declaration): ZIO[Any, Nothing, String => ZIO[Any, IOException, Unit]] =
           self.publishConfirmsTo(exchange, topology).provide(env)
       }
   }

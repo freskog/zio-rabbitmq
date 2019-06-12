@@ -28,14 +28,10 @@ object Consumer extends Serializable {
     env =>
     override val consumer: Service[Any] =
       new Service[Any] {
-        override def callbackConsumerOn[R, E](queueName: String, topology: Declaration)(
-          userFun: String => ZIO[R, E, Unit]
-        ): ZIO[R, E, Unit] =
+        override def callbackConsumerOn[R, E](queueName: String, topology: Declaration)(userFun: String => ZIO[R, E, Unit]): ZIO[R, E, Unit] =
           self.callbackConsumerOn[R, E](queueName, topology, env)(userFun)
 
-        override def pollingConsumerOn[R, E](queueName: String, topology: Declaration)(
-          userFun: String => ZIO[R, E, Unit]
-        ): ZIO[R, E, Unit] =
+        override def pollingConsumerOn[R, E](queueName: String, topology: Declaration)(userFun: String => ZIO[R, E, Unit]): ZIO[R, E, Unit] =
           self.pollingConsumerOn[R, E](queueName, topology, env)(userFun)
       }
   }
@@ -53,18 +49,14 @@ object Consumer extends Serializable {
   val untilNonNull: Schedule[GetResponse, GetResponse] =
     every500ms *> Schedule.doUntil[Option[GetResponse]](_.nonEmpty).map(_.get).contramap(Option(_))
 
-  def callbackConsumerOn[R, E](queueName: String, topology: Declaration, env: ConsumerEnv)(
-    userFunction: String => ZIO[R, E, Unit]
-  ): ZIO[R, E, Unit] =
+  def callbackConsumerOn[R, E](queueName: String, topology: Declaration, env: ConsumerEnv)(userFunction: String => ZIO[R, E, Unit]): ZIO[R, E, Unit] =
     for {
       queue <- consumerQueue
       _     <- callbackConsumerFiber(queueName, topology, queue).provide(env).fork
       _     <- (queue.take >>= consumeWithUserFunction[R, E](env, userFunction)).forever
     } yield ()
 
-  def pollingConsumerOn[R, E](queueName: String, topology: Declaration, env: ConsumerEnv)(
-    userFunction: String => ZIO[R, E, Unit]
-  ): ZIO[R, E, Unit] =
+  def pollingConsumerOn[R, E](queueName: String, topology: Declaration, env: ConsumerEnv)(userFunction: String => ZIO[R, E, Unit]): ZIO[R, E, Unit] =
     for {
       queue <- consumerQueue
       _     <- pollingConsumerFiber(queueName, topology, queue).provide(env).fork
@@ -98,12 +90,7 @@ object Consumer extends Serializable {
       } yield ()
     }.sandbox.retry(Schedules.restartFiber(queueName)).option.unit
 
-  def makeRabbitConsumer(
-    channel: Channel,
-    rts: Runtime[Any],
-    status: Promise[IOException, Unit],
-    queue: Queue[AmqpMessage]
-  ): RConsumer =
+  def makeRabbitConsumer(channel: Channel, rts: Runtime[Any], status: Promise[IOException, Unit], queue: Queue[AmqpMessage]): RConsumer =
     new RConsumer {
       override def handleConsumeOk(consumerTag: String): Unit = ()
       override def handleRecoverOk(consumerTag: String): Unit = ()
@@ -116,12 +103,7 @@ object Consumer extends Serializable {
       override def handleShutdownSignal(consumerTag: String, sig: ShutdownSignalException): Unit =
         rts.unsafeRun(status.fail(new IOException(sig)))
 
-      override def handleDelivery(
-        consumerTag: String,
-        envelope: Envelope,
-        properties: AMQP.BasicProperties,
-        body: Array[Byte]
-      ): Unit =
+      override def handleDelivery(consumerTag: String, envelope: Envelope, properties: AMQP.BasicProperties, body: Array[Byte]): Unit =
         rts.unsafeRun(queue.offer(AmqpMessage(new String(body, "UTF-8"), envelope.getDeliveryTag, channel)))
 
     }
