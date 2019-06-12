@@ -15,7 +15,6 @@ object DemoApp extends App {
 
   val program: ZIO[ResultPrinter with Consumer with CalculatorInput with Publisher with TopologyClient, IOException, Unit] =
     for {
-      _  <- RabbitTopology.topology
       f1 <- RabbitTopology.commandConsumer.fork
       f2 <- RabbitTopology.resultConsumer.fork
       _  <- f1.join zip f2.join
