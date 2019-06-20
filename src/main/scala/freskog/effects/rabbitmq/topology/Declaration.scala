@@ -1,7 +1,5 @@
 package freskog.effects.rabbitmq.topology
 
-import freskog.effects.rabbitmq.{ AmqpQueue, FanoutExchange }
-
 case class Declaration(queues: List[AmqpQueue], exchanges: List[FanoutExchange], bindings: Map[AmqpQueue, FanoutExchange]) {
   def addQueue(name: String): Either[String, Declaration] =
     if (queues.map(_.name).contains(name)) Left(s"Bad Queue: $name already defined")

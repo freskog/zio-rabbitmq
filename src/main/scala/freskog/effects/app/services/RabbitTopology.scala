@@ -33,7 +33,7 @@ object RabbitTopology {
       publishFn <- publishConfirmsTo(resultsExchange, topology)
     } yield (events: List[ResultEvent]) => ZIO.foreach_(events.map(_.toString))(publishFn)
 
-  val commandConsumer: ZIO[CalculatorInput with Publisher with Consumer, IOException, Unit] =
+  val commandConsumer: ZIO[CalculatorInput with Consumer with Publisher, IOException, Unit] =
     for {
       topology       <- topology
       publishFn      <- resultPublisher
