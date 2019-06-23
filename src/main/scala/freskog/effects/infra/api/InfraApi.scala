@@ -1,7 +1,5 @@
 package freskog.effects.infra.api
 
-import java.io.IOException
-
 import com.rabbitmq.client.ConnectionFactory
 import freskog.effects.app.dto.{ CalculatorCommand, ResultEvent }
 import freskog.effects.infra.logger._
