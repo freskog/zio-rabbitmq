@@ -4,7 +4,7 @@ import scalaz.zio.ZIO
 
 package object events {
 
-  val eventService: ZIO[Events, Nothing, Events.Service[Any]] =
+  val eventService: ZIO[Events, Nothing, Events.Service] =
     ZIO.access[Events](_.events)
 
   def publish(event:AmqpEvent):ZIO[Events, Nothing, Unit] =

@@ -4,20 +4,25 @@ import java.io.IOException
 import java.util.concurrent.TimeUnit
 
 import com.rabbitmq.client.ShutdownSignalException
+import freskog.effects.infra.logger.Logger
 import freskog.effects.infra.rabbitmq.admin.AdminClient
 import freskog.effects.infra.rabbitmq.events._
 import freskog.effects.infra.rabbitmq.publisher.LivePublisher.Inflight
 import org.scalatest.exceptions.TestFailedException
-import org.scalatest.{Assertion, DiagrammedAssertions, FlatSpec, Matchers}
+import org.scalatest.{ Assertion, DiagrammedAssertions, FlatSpec, Matchers }
+import org.slf4j
 import scalaz.zio._
+import scalaz.zio.blocking.Blocking
 import scalaz.zio.clock.Clock
+import scalaz.zio.console.Console
 import scalaz.zio.duration.Duration
+import scalaz.zio.random.Random
 
 import scala.concurrent.TimeoutException
 
-class BaseSpec extends FlatSpec with DiagrammedAssertions with Matchers {
+abstract class BaseSpec extends FlatSpec with DiagrammedAssertions with Matchers {
 
-  type TestEnv = AdminClient with Events with Clock with Inflight
+  type TestEnv = AdminClient with Events with Clock with Inflight with Logger
 
   def testEnv[E, A](queue: List[Option[String]]): UIO[TestEnv] =
     for {
@@ -25,16 +30,22 @@ class BaseSpec extends FlatSpec with DiagrammedAssertions with Matchers {
       seqNoRef  <- Ref.make[Long](0)
       pending   <- enqueueAsEvents(queue)
       inflight  <- RefM.make[Map[Long, Promise[IOException, Unit]]](Map.empty)
-    } yield new Clock with Events with FakeAdminClient with Inflight {
-      override val messageQueue: Queue[Option[MessageReceived]] = pending
-      override val seqNo: Ref[Long]                             = seqNoRef
-      override val events: Events.Service[Any]                  = eventsEnv.events
-      override val clock: Clock.Service[Any]                    = Clock.Live.clock
+      log       <- Logger.makeLogger("Tests")
+    } yield new Clock with Events with FakeAdminClient with Inflight with Logger {
+      override val messageQueue: Queue[Option[MessageReceived]]              = pending
+      override val seqNo: Ref[Long]                                          = seqNoRef
+      override val events: Events.Service                                    = eventsEnv.events
+      override val clock: Clock.Service[Any]                                 = Clock.Live.clock
       override val toConfirm: RefM[Map[FiberId, Promise[IOException, Unit]]] = inflight
+      override val logger: Logger.Service                                    = log.logger
     }
 
-  val realRts: DefaultRuntime =
-    new DefaultRuntime {}
+  val runtimeLogger: slf4j.Logger = org.slf4j.LoggerFactory.getLogger("RuntimeLogger")
+
+  val realRts: Runtime[Clock with Console with system.System with Random with Blocking] =
+    new DefaultRuntime {}.withReportFailure { cause =>
+      if(cause.failed || cause.died) runtimeLogger.error(cause.prettyPrint) else ()
+    }
 
   def enqueueAsEvents(queued: List[Option[String]]): UIO[Queue[Option[MessageReceived]]] =
     for {
@@ -42,7 +53,7 @@ class BaseSpec extends FlatSpec with DiagrammedAssertions with Matchers {
       pendingCounter <- Ref.make[Long](0)
       messages <- ZIO.foreach(queued) {
                    case None      => UIO.succeed(None)
-                   case Some(msg) => pendingCounter.modify(n => (Some(MessageReceived(n, false, msg)), n + 1))
+                   case Some(msg) => pendingCounter.modify(n => (Some(MessageReceived(n, redelivered = false, msg)), n + 1))
                  }
       _ <- pending.offerAll(messages)
     } yield pending
@@ -59,12 +70,11 @@ class BaseSpec extends FlatSpec with DiagrammedAssertions with Matchers {
   val sig: ShutdownSignalException =
     null.asInstanceOf[ShutdownSignalException]
 
-
   def failWith(p: Promise[TestFailedException, Unit])(e: AmqpEvent): ZIO[TestEnv, Nothing, Boolean] =
     failWithMsg(p)(fail(s"unexpected event $e")) *> ZIO.succeed(true)
 
   def failWithMsg(p: Promise[TestFailedException, Unit])(msg: String): UIO[Unit] =
-    ZIO.effect(fail(msg)).refineOrDie[TestFailedException]{ case e:TestFailedException => e}.tapError(p.fail).option.unit
+    ZIO.effect(fail(msg)).refineOrDie[TestFailedException] { case e: TestFailedException => e }.tapError(p.fail).option.unit
 
   def runAsForkUntilDone[E <: Throwable, A](
     queued: List[String]
@@ -89,10 +99,10 @@ class BaseSpec extends FlatSpec with DiagrammedAssertions with Matchers {
                 for {
                   currReceived  <- received.get
                   currRemaining <- remaining.get
-                  errMsg = s"Unexpected event '$ev', expected '${currRemaining.head}' (prev received: $currReceived)"
-                  _ <- ZIO.when(currRemaining.head != ev)(failWithMsg(p)(errMsg))
-                  _ <- ZIO.when(currRemaining.head == ev)(received.update(_ ::: List(ev)) *> remaining.update(_.tail))
-                  _ <- ZIO.whenM(remaining.get.map(_.isEmpty))(p.succeed(()))
+                  errMsg        = s"Unexpected event '$ev', expected '${currRemaining.head}' (prev received: $currReceived)"
+                  _             <- ZIO.when(currRemaining.head != ev)(failWithMsg(p)(errMsg))
+                  _             <- ZIO.when(currRemaining.head == ev)(received.update(_ ::: List(ev)) *> remaining.update(_.tail))
+                  _             <- ZIO.whenM(remaining.get.map(_.isEmpty))(p.succeed(()))
                 } yield ()
               }
             }
@@ -100,5 +110,4 @@ class BaseSpec extends FlatSpec with DiagrammedAssertions with Matchers {
         _ <- p.await
       } yield succeed
     }
-
 }

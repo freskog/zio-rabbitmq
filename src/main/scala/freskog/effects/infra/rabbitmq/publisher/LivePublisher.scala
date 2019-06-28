@@ -22,28 +22,27 @@ object LivePublisher {
 
   type PublisherEnv = AdminClient with TopologyClient with Events with Inflight with Clock with Logger
 
-  def livePublisherEnv(cf: ConnectionFactory, name: String): ZManaged[Any, IOException, PublisherEnv] =
+  def livePublisherEnv(cf: ConnectionFactory, name: String, loggerEnv: Logger): ZManaged[Any, IOException, PublisherEnv] =
     for {
       adminEnv    <- AdminClient.makeLiveAdminClient(cf, name)
       eventsEnv   <- Events.makeEvents.toManaged_
       inflight    <- RefM.make[Map[Long, Promise[IOException, Unit]]](Map.empty).toManaged_
       topologyEnv = TopologyClient.makeLiveTopologyClientFrom(adminEnv, eventsEnv)
-      loggerEnv   <- Logger.makeLogger("Publisher").toManaged_
     } yield new AdminClient with TopologyClient with Events with Inflight with Clock.Live with Logger {
-      override val adminClient: AdminClient.Service[Any]                  = adminEnv.adminClient
-      override val topologyClient: TopologyClient.Service[Any]            = topologyEnv.topologyClient
-      override val events: Events.Service[Any]                            = eventsEnv.events
+      override val adminClient: AdminClient.Service                       = adminEnv.adminClient
+      override val topologyClient: TopologyClient.Service                 = topologyEnv.topologyClient
+      override val events: Events.Service                                 = eventsEnv.events
       override val toConfirm: RefM[Map[Long, Promise[IOException, Unit]]] = inflight
-      override val logger: Logger.Service[Any]                            = loggerEnv.logger
+      override val logger: Logger.Service                                 = loggerEnv.logger
     }
 
-  val retryEnv: ZIO[Any, Nothing, Logger with Clock.Live] =
+  val retryEnv: ZIO[Any, Nothing, Logger with Clock] =
     Logger
       .makeLogger("Publisher")
       .map(
         env =>
           new Logger with Clock.Live {
-            override val logger: Logger.Service[Any] = env.logger
+            override val logger: Logger.Service = env.logger
           }
       )
 
@@ -67,8 +66,9 @@ object LivePublisher {
   def publishTo(cf: ConnectionFactory, exchange: String, decl: Declaration): UIO[String => IO[IOException, Unit]] =
     for {
       messages  <- messageQueue
-      logger    = subscribe(log(s"Publisher (without no-confirms) on '$exchange'"))
-      events    = subscribeSome(handleBrokerEvent(messages))
+      prefix    = s"Publisher (no-confirms) on '$exchange'"
+      logger    = subscribe(log(prefix))
+      events    = subscribeSome(handleBrokerEventWithoutConfirms(messages))
       publisher = logger *> events *> createTopology(decl) *> withoutConfirms(exchange, messages)
       _         <- publisherFiber(cf, exchange, publisher)
     } yield createUserPublishFn(messages)
@@ -76,7 +76,7 @@ object LivePublisher {
   def publishConfirmsTo(cf: ConnectionFactory, exchange: String, decl: Declaration): UIO[String => IO[IOException, Unit]] =
     for {
       messages  <- messageQueue
-      prefix    = s"Publisher (with confirms) on '$exchange'"
+      prefix    = s"Publisher (confirms) on '$exchange'"
       logger    = subscribe(log(prefix))
       events    = subscribeSome(handleBrokerEvent(messages))
       publisher = logger *> events *> createTopology(decl) *> withConfirms(exchange, messages)
@@ -115,17 +115,24 @@ object LivePublisher {
     } yield ()
 
   def publisherFiber(cf: ConnectionFactory, name: String, publish: ZIO[PublisherEnv, IOException, Unit]): UIO[Fiber[Nothing, Unit]] =
-    retryEnv >>= (env => livePublisherEnv(cf, name).use(publish.provide).sandbox.retry(Schedules.restartFiber(name)).provide(env).option.forever.fork)
+    retryEnv >>= (
+      env => livePublisherEnv(cf, name, env).use(publish.provide).sandbox.retry(Schedules.restartFiber(name)).provide(env).option.forever.fork
+    )
 
   def log(prefix: String)(event: AmqpEvent): ZIO[Logger, Nothing, Unit] = event match {
     case MessageNacked(_, _, _)          => warn(s"$prefix - $event")
     case PublisherShutdownReceived(_, _) => error(s"$prefix - $event")
     case _: AmqpEvent                    => debug(s"$prefix - $event")
   }
+
   def handleBrokerEvent(messages: Queue[Message]): PartialFunction[AmqpEvent, ZIO[Inflight, Nothing, Unit]] = {
     case MessageAcked(deliveryTag, multiple)     => ack(deliveryTag, multiple)
     case MessageNacked(deliveryTag, multiple, _) => nack(deliveryTag, multiple)
     case PublisherShutdownReceived(_, reason)    => sendPoisonPill(reason, messages)
+  }
+
+  def handleBrokerEventWithoutConfirms(messages: Queue[Message]): PartialFunction[AmqpEvent, ZIO[Inflight, Nothing, Unit]] = {
+    case PublisherShutdownReceived(_, reason) => sendPoisonPill(reason, messages)
   }
 
   def makeListeners(rts: Runtime[Events], name: String): UIO[ConfirmListener with ShutdownListener] =

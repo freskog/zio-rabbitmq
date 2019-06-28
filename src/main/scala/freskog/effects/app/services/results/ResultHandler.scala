@@ -1,29 +1,31 @@
 package freskog.effects.app.services.results
 
-import freskog.effects.app.dto.{ComputedTotal, IncrementedTo, ResultEvent}
+import freskog.effects.app.dto.{ ComputedTotal, IncrementedTo, ResultEvent }
 import freskog.effects.domain.formatter._
-import scalaz.zio.{UIO, ZIO}
-import scalaz.zio.console._
+import freskog.effects.infra.logger._
+import scalaz.zio.{ UIO, ZIO }
 
 trait ResultHandler extends Serializable {
-  val resultEventHandler: ResultHandler.Service[Any]
+  val resultEventHandler: ResultHandler.Service
 }
 
 object ResultHandler extends Serializable {
 
-  trait Service[R] extends Serializable {
+  trait Service extends Serializable {
     def processResult(ev: ResultEvent): UIO[Unit]
   }
 
-  trait Live extends ResultHandler with Console.Live with ResultFormatter.Live { env =>
-    override val resultEventHandler: ResultHandler.Service[Any] = processResult(_).provide(env)
-  }
+  val makeLiveResultHandler: UIO[ResultHandler] =
+    Logger.makeLogger("ResultHandler").map { log =>
+      new ResultHandler with Logger with ResultFormatter.Live { env =>
+        override val resultEventHandler: ResultHandler.Service = processResult(_).provide(env)
+        override val logger: Logger.Service                    = log.logger
+      }
+    }
 
-  def processResult(ev:ResultEvent): ZIO[Console with ResultFormatter, Nothing, Unit] = ev match {
-    case IncrementedTo(state) => formatIncrementedTo(state) >>= putStrLn
-    case ComputedTotal(state) => formatComputedTotal(state) >>= putStrLn
+  def processResult(ev: ResultEvent): ZIO[Logger with ResultFormatter, Nothing, Unit] = ev match {
+    case IncrementedTo(state) => formatIncrementedTo(state) >>= info
+    case ComputedTotal(state) => formatComputedTotal(state) >>= info
   }
-
-  object Live extends Live
 
 }

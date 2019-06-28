@@ -9,17 +9,17 @@ import freskog.effects.infra.rabbitmq.publisher._
 import scalaz.zio.ZIO
 
 trait InfraApi extends Serializable {
-  val infraApi: InfraApi.Service[Any]
+  val infraApi: InfraApi.Service
 }
 
 object InfraApi extends Serializable {
 
-  trait Service[R] extends Serializable {
-    def handleCalculatorCommand[R1, E](cmd: CalculatorCommand => ZIO[R1, E, Unit]): ZIO[R with R1, E, Unit]
+  trait Service extends Serializable {
+    def handleCalculatorCommand[R1, E](cmd: CalculatorCommand => ZIO[R1, E, Unit]): ZIO[R1, E, Unit]
 
-    def handleResultEvent[R1, E](ev: ResultEvent => ZIO[R1, E, Unit]): ZIO[R with R1, E, Unit]
+    def handleResultEvent[R1, E](ev: ResultEvent => ZIO[R1, E, Unit]): ZIO[R1, E, Unit]
 
-    def publishResultEvent(ev: ResultEvent): ZIO[R, Nothing, Unit]
+    def publishResultEvent(ev: ResultEvent): ZIO[Any, Nothing, Unit]
   }
 
   def makeLiveInfraApi(cf: ConnectionFactory): ZIO[Any, Nothing, InfraApi] =
@@ -30,8 +30,8 @@ object InfraApi extends Serializable {
       resultPublisher  <- Publisher.makePublisherWithConfirms(cf, TopologyDeclaration.resultExchange, declaredTopology)
       loggerEnv        <- Logger.makeLogger("InfraAPI")
     } yield new InfraApi {
-      override val infraApi: Service[Any] =
-        new Service[Any] {
+      override val infraApi: Service =
+        new Service {
           override def handleCalculatorCommand[R1, E](handleCmd: CalculatorCommand => ZIO[R1, E, Unit]): ZIO[R1, E, Unit] =
             commandConsumer.consumer.consumeUsing(CalculatorCommand.fromString(_).fold(warn(_).provide(loggerEnv), handleCmd))
 

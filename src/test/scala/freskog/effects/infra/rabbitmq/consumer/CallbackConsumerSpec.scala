@@ -16,9 +16,9 @@ class CallbackConsumerSpec extends BaseSpec {
 
   it should "publish messagereceived event when a message is received" in {
     runAsForkUntilDone(List("#1"))(LiveConsumer.initializeConsumerOn("test-queue")) {
-      case QosEnabled(_)                      => continue
-      case ConsumerCreated(name, _, _) => continue
-      case MessageReceived(0, false, "#1")    => done
+      case QosEnabled(_)                   => continue
+      case ConsumerCreated(_, _, _)        => continue
+      case MessageReceived(0, false, "#1") => done
     }
   }
 

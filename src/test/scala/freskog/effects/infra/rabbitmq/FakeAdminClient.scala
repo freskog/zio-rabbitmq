@@ -16,8 +16,8 @@ trait FakeAdminClient extends AdminClient {
   private val emptyProps = new AMQP.BasicProperties.Builder().build()
   private val none       = ""
 
-  override val adminClient: AdminClient.Service[Any] =
-    new AdminClient.Service[Any] {
+  override val adminClient: AdminClient.Service =
+    new AdminClient.Service {
 
       override def exchangeDeclare(name: String, `type`: BuiltinExchangeType): ZIO[Any, IOException, ExchangeDeclared] =
         ZIO.succeed(ExchangeDeclared(name, `type`.getType))

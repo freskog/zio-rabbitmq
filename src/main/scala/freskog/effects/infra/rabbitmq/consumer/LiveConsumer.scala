@@ -22,10 +22,10 @@ object LiveConsumer {
       topologyEnv = TopologyClient.makeLiveTopologyClientFrom(adminEnv, eventsEnv)
       loggerEnv   <- Logger.makeLogger("Consumer").toManaged_
     } yield new AdminClient with TopologyClient with Events with Logger with Clock.Live {
-      override val adminClient: AdminClient.Service[Any]       = adminEnv.adminClient
-      override val topologyClient: TopologyClient.Service[Any] = topologyEnv.topologyClient
-      override val events: Events.Service[Any]                 = eventsEnv.events
-      override val logger: Logger.Service[Any]                 = loggerEnv.logger
+      override val adminClient: AdminClient.Service       = adminEnv.adminClient
+      override val topologyClient: TopologyClient.Service = topologyEnv.topologyClient
+      override val events: Events.Service                 = eventsEnv.events
+      override val logger: Logger.Service                 = loggerEnv.logger
     }
 
   val retryEnv: ZIO[Any, Nothing, Logger with Clock.Live] =
@@ -34,7 +34,7 @@ object LiveConsumer {
       .map(
         env =>
           new Logger with Clock.Live {
-            override val logger: Logger.Service[Any] = env.logger
+            override val logger: Logger.Service = env.logger
           }
       )
 

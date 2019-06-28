@@ -7,5 +7,4 @@ package object results {
 
   def processResult(ev: ResultEvent): ZIO[ResultHandler, Nothing, Unit] =
     ZIO.accessM[ResultHandler](_.resultEventHandler.processResult(ev))
-
 }

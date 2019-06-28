@@ -8,11 +8,11 @@ import freskog.effects.infra.rabbitmq.events._
 import scalaz.zio.{ZIO, ZManaged}
 
 trait TopologyClient extends Serializable {
-  val topologyClient: TopologyClient.Service[Any]
+  val topologyClient: TopologyClient.Service
 }
 
 object TopologyClient extends Serializable { self =>
-  trait Service[R] extends Serializable {
+  trait Service extends Serializable {
     def createTopology(decl: Declaration): ZIO[Any, IOException, Unit]
   }
 
@@ -21,11 +21,11 @@ object TopologyClient extends Serializable { self =>
 
   def makeLiveTopologyClientFrom(adminEnv: AdminClient, eventsEnv: Events):TopologyClient =
     new TopologyClient {
-      override val topologyClient: Service[Any] = (decl: Declaration) =>
+      override val topologyClient: Service = (decl: Declaration) =>
         createTopology(decl).provide {
           new AdminClient with Events {
-            override val adminClient: AdminClient.Service[Any] = adminEnv.adminClient
-            override val events: Events.Service[Any] = eventsEnv.events
+            override val adminClient: AdminClient.Service = adminEnv.adminClient
+            override val events: Events.Service = eventsEnv.events
           }
         }
     }

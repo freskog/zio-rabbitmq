@@ -3,15 +3,15 @@ package freskog.effects.domain.calculator
 import scalaz.zio.{ Ref, ZIO }
 
 trait Calculator extends Serializable {
-  val calculator: Calculator.Service[Any]
+  val calculator: Calculator.Service
 }
 
 
 object Calculator extends Serializable {
 
   trait Live extends Calculator {
-    override val calculator: Service[Any] =
-      new Service[Any] {
+    override val calculator: Service =
+      new Service {
         override def incrementByOne(state: Ref[Int]): ZIO[Any, Nothing, Int] =
           state.update(_ + 1)
 
@@ -20,9 +20,9 @@ object Calculator extends Serializable {
       }
   }
 
-  trait Service[R] extends Serializable {
-    def computeCurrentValue(state: Ref[Int]): ZIO[R, Nothing, Int]
-    def incrementByOne(state: Ref[Int]): ZIO[R, Nothing, Int]
+  trait Service extends Serializable {
+    def computeCurrentValue(state: Ref[Int]): ZIO[Any, Nothing, Int]
+    def incrementByOne(state: Ref[Int]): ZIO[Any, Nothing, Int]
   }
 
 }

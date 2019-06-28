@@ -30,7 +30,7 @@ class UserFunctionSpec extends BaseSpec {
       for {
         m <- messageQueue
         p <- Promise.make[IOException, Unit]
-        _ <- subscribe(handleEventFromBroker(m))
+        _ <- subscribeSome(handleEventFromBroker(m))
         _ <- subscribeSome { case MessageNacked(0, false, true) => p.succeed(()).unit }
         _ <- consumeWithUserFunction(_ => ZIO.fail("Oh noes, a user error!"), m).fork
         _ <- publish(MessageReceived(0, redelivered = false, "I-didn't-really-receive-this"))

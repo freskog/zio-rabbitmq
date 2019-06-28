@@ -5,7 +5,7 @@ import scalaz.zio.ZIO
 
 package object api {
 
-  val infraApiService: ZIO[InfraApi, Nothing, InfraApi.Service[Any]] =
+  val infraApiService: ZIO[InfraApi, Nothing, InfraApi.Service] =
     ZIO.access[InfraApi](_.infraApi)
 
   def handleCalculatorCommand[R1, E](handleCmd: CalculatorCommand => ZIO[R1, E, Unit]): ZIO[InfraApi with R1, E, Unit] =

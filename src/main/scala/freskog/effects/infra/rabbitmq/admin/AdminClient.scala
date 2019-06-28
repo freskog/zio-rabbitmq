@@ -13,13 +13,13 @@ import scalaz.zio.clock._
 import scala.concurrent.TimeoutException
 
 trait AdminClient extends Serializable {
-  val adminClient: AdminClient.Service[Any]
+  val adminClient: AdminClient.Service
 }
 
 object AdminClient extends Serializable {
   self =>
 
-  trait Service[R] extends Serializable {
+  trait Service extends Serializable {
     def exchangeDeclare(name: String, `type`: BuiltinExchangeType): ZIO[Any, IOException, ExchangeDeclared]
     def queueDeclare(name: String): ZIO[Any, IOException, QueueDeclared]
     def queueBind(queue: String, exchange: String, routingKey: String): ZIO[Any, IOException, QueueBoundToExchange]
@@ -44,19 +44,17 @@ object AdminClient extends Serializable {
       override val channel: Channel = chan
     }
 
-  trait ChannelProvider extends Serializable {
-    val channel: Channel
-  }
-
   val convertToIOException: PartialFunction[Throwable, IOException] = {
     case io: IOException              => io
     case sig: ShutdownSignalException => new IOException(sig)
     case t: TimeoutException          => new IOException(t)
   }
 
-  trait Live extends AdminClient with Blocking.Live with Clock.Live with ChannelProvider { env =>
+  trait Live extends AdminClient with Blocking.Live with Clock.Live { env =>
 
-    override val adminClient: Service[Any] = new Service[Any] {
+    val channel: Channel
+
+    override val adminClient: Service = new Service {
       import scala.collection.JavaConverters._
 
       val emptyProps: AMQP.BasicProperties = new AMQP.BasicProperties.Builder().build()
@@ -114,25 +112,21 @@ object AdminClient extends Serializable {
   }
 
   def createManagedConnection(cf: ConnectionFactory, name: String): ZManaged[Logger, IOException, Connection] =
-    ZManaged.environment[Logger].flatMap(env =>
-      ZManaged.make(newConnection(name, cf))(closeConnection(_).provide(env)).refineOrDie(convertToIOException)
-    )
+    ZManaged.make(newConnection(name, cf))(closeConnection)
 
   def createManagedChannel(conn: Connection): ZManaged[Logger, IOException, Channel] =
-    ZManaged.environment[Logger].flatMap( env =>
-      ZManaged.make(createChannel(conn))(closeChannel(_).provide(env)).refineOrDie(convertToIOException)
-    )
+    ZManaged.make(createChannel(conn))(closeChannel)
 
   def closeChannel(chan: Channel): ZIO[Logger, Nothing, Unit] =
     ZIO.effect(chan.close()).catchAll(throwable)
 
-  def createChannel(conn: Connection): Task[Channel] =
-    ZIO.effect(conn.createChannel())
+  def createChannel(conn: Connection): ZIO[Logger, IOException, Channel] =
+    ZIO.effect(conn.createChannel()).refineOrDie(convertToIOException)
 
   def closeConnection(conn: Connection): ZIO[Logger, Nothing, Unit] =
     ZIO.effect(conn.close()).catchAll(throwable)
 
-  def newConnection(name: String, connectionFactory: ConnectionFactory): Task[Connection] =
-    ZIO.effect(connectionFactory.newConnection(name))
+  def newConnection(name: String, connectionFactory: ConnectionFactory): ZIO[Logger, IOException, Connection] =
+    ZIO.effect(connectionFactory.newConnection(name)).refineOrDie(convertToIOException)
 
 }

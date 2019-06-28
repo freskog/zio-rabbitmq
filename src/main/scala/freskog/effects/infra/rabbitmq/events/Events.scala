@@ -3,15 +3,15 @@ package freskog.effects.infra.rabbitmq.events
 import scalaz.zio._
 
 trait Events extends Serializable {
-  val events:Events.Service[Any]
+  val events:Events.Service
 }
 
 object Events extends Serializable {
 
-  trait Service[R] {
-    def publish(e:AmqpEvent):ZIO[R, Nothing, Unit]
-    def subscribe[R1 <: R](handler: AmqpEvent => ZIO[R1,Nothing,Unit]):ZIO[R1, Nothing, Unit]
-    def subscribeSome[R1 <: R](handler: PartialFunction[AmqpEvent, ZIO[R1, Nothing, Unit]]):ZIO[R1,Nothing, Unit]
+  trait Service {
+    def publish(e:AmqpEvent): IO[Nothing, Unit]
+    def subscribe[R](handler: AmqpEvent => ZIO[R,Nothing,Unit]):ZIO[R, Nothing, Unit]
+    def subscribeSome[R](handler: PartialFunction[AmqpEvent, ZIO[R, Nothing, Unit]]):ZIO[R,Nothing, Unit]
   }
 
   def makeEvents:UIO[Events] =
@@ -23,8 +23,8 @@ object Events extends Serializable {
 
     val handlers:Ref[List[Queue[AmqpEvent]]]
 
-    override val events: Service[Any] =
-      new Service[Any] {
+    override val events: Service =
+      new Service {
         override def publish(e: AmqpEvent): ZIO[Any, Nothing, Unit] =
          handlers.get.flatMap(ZIO.foreach_(_)(_ offer e))
 
@@ -34,7 +34,7 @@ object Events extends Serializable {
         override def subscribe[R](handler: AmqpEvent => ZIO[R, Nothing, Unit]): ZIO[R, Nothing, Unit] =
           for {
             queue <- Queue.unbounded[AmqpEvent]
-                _ <- (queue.take >>= handler).forever.ensuring(queue.shutdown <* handlers.update(_.filterNot(_ == queue))).interruptChildren.fork
+                _ <- (queue.take >>= handler).forever.ensuring(handlers.update(_.filterNot(_ == queue)) *> queue.shutdown).fork
                 _ <- handlers.update(queue :: _)
           } yield ()
       }

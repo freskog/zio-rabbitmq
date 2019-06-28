@@ -5,11 +5,11 @@ import scalaz.zio.clock._
 import scalaz.zio.console._
 
 trait Logger extends Serializable {
-  val logger: Logger.Service[Any]
+  val logger: Logger.Service
 }
 
 object Logger extends Serializable {
-  trait Service[R] extends Serializable {
+  trait Service extends Serializable {
     def debug(msg: String): UIO[Unit]
     def info(msg: String): UIO[Unit]
     def warn(msg: String): UIO[Unit]
@@ -21,19 +21,19 @@ object Logger extends Serializable {
     UIO.effectTotal(org.slf4j.LoggerFactory.getLogger(name)).map { log =>
       new Logger with Console.Live with Clock.Live {
 
-        override val logger: Service[Any] =
-          new Service[Any] {
+        override val logger: Service =
+          new Service {
             override def debug(msg: String): UIO[Unit] =
-              fmtString(msg).map(log.debug)
+              fmtString(msg) >>= (str => UIO.effectTotal(log.debug(str)))
 
             override def info(msg: String): UIO[Unit] =
-              fmtString(msg).map(log.info)
+              fmtString(msg) >>= (str => UIO.effectTotal(log.info(str)))
 
             override def warn(msg: String): UIO[Unit] =
-              fmtString(msg).map(log.warn)
+              fmtString(msg) >>= (str => UIO.effectTotal(log.warn(str)))
 
             override def error(msg: String): UIO[Unit] =
-              fmtString(msg).map(log.error)
+              fmtString(msg) >>= (str => UIO.effectTotal(log.error(str)))
 
             override def throwable(t: Throwable): UIO[Unit] =
               fmtString("Unhandled throwable") >>= (msg => ZIO.effectTotal(log.error(msg, t)))

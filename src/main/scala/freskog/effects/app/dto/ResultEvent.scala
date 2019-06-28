@@ -8,8 +8,8 @@ final case class ComputedTotal(state: Int) extends ResultEvent
 
 object ResultEvent {
 
-  val incrementedTo: Regex = """IncrementedTo(\d+)""".r
-  val computedTotal: Regex = """ComputedTotal(\d+)""".r
+  val incrementedTo: Regex = """IncrementedTo\((\d+)\)""".r
+  val computedTotal: Regex = """ComputedTotal\((\d+)\)""".r
 
   def fromString(str: String): Either[String, ResultEvent] =
     str match {

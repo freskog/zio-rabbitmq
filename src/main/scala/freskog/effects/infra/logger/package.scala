@@ -4,7 +4,7 @@ import scalaz.zio.ZIO
 
 package object logger {
 
-  val loggerService: ZIO[Logger, Nothing, Logger.Service[Any]] =
+  val loggerService: ZIO[Logger, Nothing, Logger.Service] =
     ZIO.access[Logger](_.logger)
 
   def debug(msg:String):ZIO[Logger, Nothing, Unit] =

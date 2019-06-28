@@ -6,7 +6,7 @@ import scalaz.zio.ZIO
 
 package object topology {
 
-  val topologyClientService: ZIO[TopologyClient, Nothing, TopologyClient.Service[Any]] =
+  val topologyClientService: ZIO[TopologyClient, Nothing, TopologyClient.Service] =
     ZIO.access[TopologyClient](_.topologyClient)
 
   def createTopology(declaredToplogy: Declaration): ZIO[TopologyClient, IOException, Unit] =

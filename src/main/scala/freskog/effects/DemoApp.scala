@@ -27,11 +27,14 @@ object DemoApp extends App {
 
   def liveEnv(cf: ConnectionFactory): ZIO[Any, Nothing, LiveEnv] =
     for {
-      api        <- InfraApi.makeLiveInfraApi(cf)
-      cmdHandler <- CalculatorCommandHandler.makeLiveCalculatorCommandHandler(api)
-    } yield new CalculatorCommandHandler with ResultHandler.Live with InfraApi {
-      override val calculatorCommandHandler: CalculatorCommandHandler.Service[Any] = cmdHandler.calculatorCommandHandler
-      override val infraApi: InfraApi.Service[Any]                                 = api.infraApi
+      api           <- InfraApi.makeLiveInfraApi(cf)
+      publishResult =  ResultPublisher.fromPublishFn(api.infraApi.publishResultEvent)
+      cmdHandler    <- CalculatorCommandHandler.makeLiveCalculatorCommandHandler(publishResult)
+      resultHandler <- ResultHandler.makeLiveResultHandler
+    } yield new CalculatorCommandHandler with ResultHandler with InfraApi {
+      override val calculatorCommandHandler: CalculatorCommandHandler.Service = cmdHandler.calculatorCommandHandler
+      override val infraApi: InfraApi.Service                                 = api.infraApi
+      override val resultEventHandler: ResultHandler.Service                  = resultHandler.resultEventHandler
     }
 
   def disableAutorecovery(cf: ConnectionFactory): UIO[Unit] =

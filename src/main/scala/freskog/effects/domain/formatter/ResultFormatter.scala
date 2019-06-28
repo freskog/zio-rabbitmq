@@ -1,18 +1,18 @@
 package freskog.effects.domain.formatter
 
 trait ResultFormatter {
-  val formatter: ResultFormatter.Service[Any]
+  val formatter: ResultFormatter.Service
 }
 
 object ResultFormatter {
-  trait Service[R] {
+  trait Service {
     def formatIncrementedTo(value: Int): String
     def formatComputedTotal(value: Int): String
   }
 
   trait Live extends ResultFormatter {
-    override val formatter: Service[Any] =
-      new Service[Any] {
+    override val formatter: Service =
+      new Service {
         override def formatIncrementedTo(value: Int): String =
           s"After applying the increment by one command, the new total is '$value'"
 

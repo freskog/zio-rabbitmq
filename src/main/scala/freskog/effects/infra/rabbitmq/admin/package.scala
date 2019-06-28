@@ -8,7 +8,7 @@ import scalaz.zio.ZIO
 
 package object admin {
 
-  val adminClientService: ZIO[AdminClient, Nothing, admin.AdminClient.Service[Any]] =
+  val adminClientService: ZIO[AdminClient, Nothing, admin.AdminClient.Service] =
     ZIO.access(_.adminClient)
 
   def exchangeDeclare(name: String, `type`: BuiltinExchangeType): ZIO[AdminClient, IOException, ExchangeDeclared] =

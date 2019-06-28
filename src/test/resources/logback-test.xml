@@ -1,24 +1,25 @@
 <configuration>
 
-    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
-        <withJansi>true</withJansi>
+    <appender name="FILE" class="ch.qos.logback.core.FileAppender">
+        <file>test-logs/test.log</file>
+        <append>false</append>
         <encoder>
             <pattern>%-30(%d{HH:mm:ss.SSS} %-5level %logger{20}) - %msg%n</pattern>
         </encoder>
     </appender>
 
     <logger name="Consumer" level="debug" additivity="false">
-        <appender-ref ref="CONSOLE"/>
+        <appender-ref ref="FILE"/>
     </logger>
 
 
     <logger name="Publisher" level="debug" additivity="false">
-        <appender-ref ref="CONSOLE"/>
+        <appender-ref ref="FILE"/>
     </logger>
 
 
-    <root level="info">
-        <appender-ref ref="CONSOLE"/>
+    <root level="error">
+        <appender-ref ref="FILE"/>
     </root>
 
 </configuration>

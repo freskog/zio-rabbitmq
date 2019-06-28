@@ -4,7 +4,7 @@ import scalaz.zio.{ Ref, ZIO }
 
 package object calculator {
 
-  val calculatorService: ZIO[Calculator, Nothing, Calculator.Service[Any]] =
+  val calculatorService: ZIO[Calculator, Nothing, Calculator.Service] =
     ZIO.access[Calculator](_.calculator)
 
   def incrementByOne(state: Ref[Int]): ZIO[Calculator, Nothing, Int] =
