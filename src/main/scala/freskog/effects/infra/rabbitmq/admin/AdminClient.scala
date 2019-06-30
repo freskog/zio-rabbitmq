@@ -38,8 +38,8 @@ object AdminClient extends Serializable {
   def makeLiveAdminClient(cf: ConnectionFactory, name: String): ZManaged[Any, IOException, AdminClient] =
     for {
       loggerEnv <- Logger.makeLogger("AdminClient").toManaged_
-      conn <- createManagedConnection(cf, name).provide(loggerEnv)
-      chan <- createManagedChannel(conn).provide(loggerEnv)
+      conn      <- createManagedConnection(cf, name).provide(loggerEnv)
+      chan      <- createManagedChannel(conn).provide(loggerEnv)
     } yield new Live {
       override val channel: Channel = chan
     }
@@ -78,7 +78,7 @@ object AdminClient extends Serializable {
       override def basicGet(queueName: String): ZIO[Any, IOException, Option[MessageReceived]] =
         channelOp(_.basicGet(queueName, false)).map(
           Option(_).map(
-            r => MessageReceived(r.getEnvelope.getDeliveryTag, r.getEnvelope.isRedeliver, new String(r.getBody,"UTF-8"))
+            r => MessageReceived(r.getEnvelope.getDeliveryTag, r.getEnvelope.isRedeliver, new String(r.getBody, "UTF-8"))
           )
         )
 
@@ -95,7 +95,9 @@ object AdminClient extends Serializable {
         channelOp(_.basicQos(prefetchCount)) *> ZIO.succeed(QosEnabled(prefetchCount))
 
       override def basicPublish(exchange: String, routingKey: String, body: Array[Byte]): ZIO[Any, IOException, MessagePublished] =
-        channelOp(_.basicPublish(exchange, routingKey, emptyProps, body)) *> ZIO.succeed(MessagePublished(exchange, routingKey, new String(body,"UTF-8")))
+        channelOp(_.basicPublish(exchange, routingKey, emptyProps, body)) *> ZIO.succeed(
+          MessagePublished(exchange, routingKey, new String(body, "UTF-8"))
+        )
 
       override def addConfirmListener(listener: ConfirmListener): ZIO[Any, Nothing, ConfirmListenerAdded] =
         channelOp(_.addConfirmListener(listener)).orDie *> ZIO.succeed(ConfirmListenerAdded(listener))

@@ -6,9 +6,9 @@ trait Events extends Serializable {
   val events:Events.Service
 }
 
-object Events extends Serializable {
+object Events {
 
-  trait Service {
+  trait Service extends Serializable {
     def publish(e:AmqpEvent): IO[Nothing, Unit]
     def subscribe[R](handler: AmqpEvent => ZIO[R,Nothing,Unit]):ZIO[R, Nothing, Unit]
     def subscribeSome[R](handler: PartialFunction[AmqpEvent, ZIO[R, Nothing, Unit]]):ZIO[R,Nothing, Unit]
