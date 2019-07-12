@@ -1,6 +1,6 @@
 package freskog.effects.domain.calculator
 
-import scalaz.zio.{ Ref, ZIO }
+import zio.{ Ref, ZIO }
 
 trait Calculator extends Serializable {
   val calculator: Calculator.Service

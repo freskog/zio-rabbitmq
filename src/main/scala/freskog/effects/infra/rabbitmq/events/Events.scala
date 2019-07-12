@@ -1,6 +1,6 @@
 package freskog.effects.infra.rabbitmq.events
 
-import scalaz.zio._
+import zio._
 
 trait Events extends Serializable {
   val events:Events.Service

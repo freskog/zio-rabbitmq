@@ -4,7 +4,7 @@ import java.io.IOException
 
 import freskog.effects.infra.rabbitmq.BaseSpec
 import freskog.effects.infra.rabbitmq.publisher.LivePublisher._
-import scalaz.zio.Promise
+import zio.Promise
 
 class PublisherWithoutConfirmsSpec extends BaseSpec {
 

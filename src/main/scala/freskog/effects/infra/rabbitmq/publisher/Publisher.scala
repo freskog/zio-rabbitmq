@@ -4,7 +4,7 @@ import java.io.IOException
 
 import com.rabbitmq.client.ConnectionFactory
 import freskog.effects.infra.rabbitmq.topology._
-import scalaz.zio._
+import zio._
 
 trait Publisher extends Serializable {
   val publisher: Publisher.Service

@@ -1,7 +1,7 @@
 package freskog.effects.app.services.commands
 
 import freskog.effects.app.dto.ResultEvent
-import scalaz.zio.UIO
+import zio.UIO
 
 trait ResultPublisher {
   val resultPublisher:ResultPublisher.Service

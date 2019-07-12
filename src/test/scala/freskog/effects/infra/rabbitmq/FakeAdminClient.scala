@@ -5,7 +5,7 @@ import java.io.IOException
 import com.rabbitmq.client._
 import freskog.effects.infra.rabbitmq.admin._
 import freskog.effects.infra.rabbitmq.events._
-import scalaz.zio._
+import zio._
 
 trait FakeAdminClient extends AdminClient {
 

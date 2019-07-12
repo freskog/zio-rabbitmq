@@ -3,7 +3,7 @@ package freskog.effects.app.services.results
 import freskog.effects.app.dto.{ ComputedTotal, IncrementedTo, ResultEvent }
 import freskog.effects.domain.formatter._
 import freskog.effects.infra.logger._
-import scalaz.zio.{ UIO, ZIO }
+import zio.{ UIO, ZIO }
 
 trait ResultHandler extends Serializable {
   val resultEventHandler: ResultHandler.Service

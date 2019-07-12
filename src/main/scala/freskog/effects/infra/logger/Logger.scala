@@ -1,8 +1,8 @@
 package freskog.effects.infra.logger
 
-import scalaz.zio._
-import scalaz.zio.clock._
-import scalaz.zio.console._
+import zio._
+import zio.clock._
+import zio.console._
 
 trait Logger extends Serializable {
   val logger: Logger.Service

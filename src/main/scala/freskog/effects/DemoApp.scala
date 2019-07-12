@@ -4,7 +4,7 @@ import com.rabbitmq.client.ConnectionFactory
 import freskog.effects.app.services.commands._
 import freskog.effects.app.services.results._
 import freskog.effects.infra.api._
-import scalaz.zio._
+import zio._
 
 object DemoApp extends App {
 

@@ -11,12 +11,12 @@ import freskog.effects.infra.rabbitmq.publisher.LivePublisher.Inflight
 import org.scalatest.exceptions.TestFailedException
 import org.scalatest.{ Assertion, DiagrammedAssertions, FlatSpec, Matchers }
 import org.slf4j
-import scalaz.zio._
-import scalaz.zio.blocking.Blocking
-import scalaz.zio.clock.Clock
-import scalaz.zio.console.Console
-import scalaz.zio.duration.Duration
-import scalaz.zio.random.Random
+import zio._
+import zio.blocking.Blocking
+import zio.clock.Clock
+import zio.console.Console
+import zio.duration.Duration
+import zio.random.Random
 
 import scala.concurrent.TimeoutException
 
@@ -24,7 +24,7 @@ abstract class BaseSpec extends FlatSpec with DiagrammedAssertions with Matchers
 
   type TestEnv = AdminClient with Events with Clock with Inflight with Logger
 
-  def testEnv[E, A](queue: List[Option[String]]): UIO[TestEnv] =
+  def testEnv(queue: List[Option[String]]): UIO[TestEnv] =
     for {
       eventsEnv <- Events.makeEvents
       seqNoRef  <- Ref.make[Long](0)
@@ -61,8 +61,7 @@ abstract class BaseSpec extends FlatSpec with DiagrammedAssertions with Matchers
   def run[E <: Throwable, A](queued: List[String])(z: ZIO[TestEnv, E, A]): A =
     realRts.unsafeRun(
       testEnv(queued.map(Option(_))) >>=
-        z.interruptChildren.timeoutFail(new TimeoutException("Test didn't complete"))(Duration(3, TimeUnit.SECONDS)).provide
-    )
+        z.interruptChildren.timeoutFail(new TimeoutException("Test didn't complete"))(Duration(3, TimeUnit.SECONDS)).provide)
 
   val done: ZIO[TestEnv, Nothing, Boolean]     = ZIO.succeed(true)
   val continue: ZIO[TestEnv, Nothing, Boolean] = ZIO.succeed(false)
@@ -71,7 +70,7 @@ abstract class BaseSpec extends FlatSpec with DiagrammedAssertions with Matchers
     null.asInstanceOf[ShutdownSignalException]
 
   def failWith(p: Promise[TestFailedException, Unit])(e: AmqpEvent): ZIO[TestEnv, Nothing, Boolean] =
-    failWithMsg(p)(fail(s"unexpected event $e")) *> ZIO.succeed(true)
+    failWithMsg(p)(s"unexpected event $e") *> ZIO.succeed(true)
 
   def failWithMsg(p: Promise[TestFailedException, Unit])(msg: String): UIO[Unit] =
     ZIO.effect(fail(msg)).refineOrDie[TestFailedException] { case e: TestFailedException => e }.tapError(p.fail).option.unit

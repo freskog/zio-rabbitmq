@@ -3,7 +3,7 @@ package freskog.effects.infra.rabbitmq
 import java.io.IOException
 
 import freskog.effects.infra.rabbitmq.topology.Declaration
-import scalaz.zio.ZIO
+import zio.ZIO
 
 object TopologyDeclaration {
   val commandQueue    = "commandQueue"

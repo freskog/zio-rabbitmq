@@ -1,6 +1,6 @@
 package freskog.effects.domain
 
-import scalaz.zio.{ Ref, ZIO }
+import zio.{ Ref, ZIO }
 
 package object calculator {
 

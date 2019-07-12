@@ -2,7 +2,7 @@ package freskog.effects.infra.rabbitmq
 
 import java.io.IOException
 
-import scalaz.zio.ZIO
+import zio.ZIO
 
 package object topology {
 

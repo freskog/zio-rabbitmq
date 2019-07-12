@@ -8,8 +8,8 @@ import freskog.effects.infra.rabbitmq.Schedules
 import freskog.effects.infra.rabbitmq.admin._
 import freskog.effects.infra.rabbitmq.events._
 import freskog.effects.infra.rabbitmq.topology.{ createTopology, Declaration, TopologyClient }
-import scalaz.zio.clock.Clock
-import scalaz.zio.{ Fiber, IO, Promise, Queue, RefM, Runtime, UIO, ZIO, ZManaged }
+import zio.clock.Clock
+import zio.{ Fiber, IO, Promise, Queue, RefM, Runtime, UIO, ZIO, ZManaged }
 
 object LivePublisher {
 
@@ -97,14 +97,13 @@ object LivePublisher {
     }.forever
 
   def withConfirms(exchange: String, messages: Queue[Message]): ZIO[Inflight with AdminClient with Events, IOException, Unit] =
-    for {
+    (for {
       rts      <- ZIO.runtime[Events]
       listener <- makeListeners(rts, exchange)
       _        <- addConfirmListener(listener) tap publish
       _        <- addShutdownListener(listener) tap publish
       _        <- confirmSelect tap publish
-      _        <- publishMsg(exchange, messages).forever
-    } yield ()
+    } yield ()) <* publishMsg(exchange, messages).forever
 
   def publishMsg(ex: String, messages: Queue[Message]): ZIO[Inflight with AdminClient with Events, IOException, Unit] =
     for {
@@ -169,7 +168,7 @@ object LivePublisher {
 
   def nack(tag: Long, multiple: Boolean): ZIO[Inflight, Nothing, Unit] = {
     def nackTag(t: Long): ZIO[Inflight, Nothing, Unit] =
-      updateInflight(m => m(tag).fail(nackException(tag)) *> ZIO.succeed(m - tag)).unit
+      updateInflight(m => m(t).fail(nackException(t)) *> ZIO.succeed(m - t)).unit
     if (multiple) allTags(tag, nackTag).unit else nackTag(tag)
   }
 

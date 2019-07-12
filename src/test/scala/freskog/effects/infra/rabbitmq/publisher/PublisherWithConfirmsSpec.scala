@@ -6,7 +6,7 @@ import com.rabbitmq.client.{ ConfirmListener, ShutdownListener }
 import freskog.effects.infra.rabbitmq.BaseSpec
 import freskog.effects.infra.rabbitmq.events.{ ConfirmListenerAdded, _ }
 import freskog.effects.infra.rabbitmq.publisher.LivePublisher._
-import scalaz.zio._
+import zio._
 
 class PublisherWithConfirmsSpec extends BaseSpec {
 

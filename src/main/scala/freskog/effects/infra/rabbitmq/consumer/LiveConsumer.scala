@@ -8,8 +8,8 @@ import freskog.effects.infra.rabbitmq._
 import freskog.effects.infra.rabbitmq.admin._
 import freskog.effects.infra.rabbitmq.events._
 import freskog.effects.infra.rabbitmq.topology.{ createTopology, Declaration, TopologyClient }
-import scalaz.zio.clock.Clock
-import scalaz.zio.{ Fiber, Promise, Queue, Runtime, UIO, ZIO, ZManaged }
+import zio.clock.Clock
+import zio.{ Fiber, Promise, Queue, Runtime, UIO, ZIO, ZManaged }
 
 object LiveConsumer {
 
@@ -50,7 +50,14 @@ object LiveConsumer {
     decl: Declaration,
     strategy: ZIO[ConsumerEnv, IOException, Unit],
     userFun: String => ZIO[R, E, Unit]
-  ): ZIO[R, E, Unit] =
+  ): ZIO[R, E, Nothing] =
+    startConsumer(cf, queueName, decl, strategy) >>= (messages => consumeWithUserFunction(userFun, messages))
+
+
+    def startConsumer(cf: ConnectionFactory,
+                      queueName: String,
+                      decl: Declaration,
+                      strategy: ZIO[ConsumerEnv, IOException, Unit]): ZIO[Any, Nothing, Queue[AmqpMessage]] =
     for {
       messages     <- messageQueue
       init         = createTopology(decl)
@@ -58,17 +65,16 @@ object LiveConsumer {
       brokerEvents = subscribeSome(handleEventFromBroker(messages))
       consumer     = brokerEvents *> logger *> init *> strategy
       _            <- consumerFiber(cf, queueName, consumer)
-      _            <- consumeWithUserFunction(userFun, messages)
-    } yield ()
+    } yield messages
 
   def consumeWithUserFunction[R, E](userFunction: String => ZIO[R, E, Unit], messages: Queue[AmqpMessage]): ZIO[R, E, Nothing] =
     messages.take.flatMap(msg => userFunction(msg.body).sandbox.foldCauseM(_ => msg.nack, _ => msg.ack)).forever
 
   def ack(tag: Long): ZIO[Events with AdminClient with Logger, Nothing, Unit] =
-    basicAck(tag, multiple = false).tap(publish).catchAll(throwable).unit
+    basicAck(tag, multiple = false).tap(publish).unit.catchAll[Events with AdminClient with Logger, Nothing, Unit](throwable)
 
   def nack(tag: Long, redelivered: Boolean): ZIO[Events with AdminClient with Logger, Nothing, Unit] =
-    basicNack(tag, multiple = false, requeue = !redelivered).tap(publish).catchAll(throwable).unit
+    basicNack(tag, multiple = false, requeue = !redelivered).tap(publish).unit.catchAll[Events with AdminClient with Logger, Nothing, Unit](throwable)
 
   def log(prefix: String)(event: AmqpEvent): ZIO[Logger, Nothing, Unit] = event match {
     case SubscriberCancelledByUser(_, _)   => warn(s"$prefix - $event")

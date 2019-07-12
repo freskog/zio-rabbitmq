@@ -6,7 +6,7 @@ import freskog.effects.infra.logger._
 import freskog.effects.infra.rabbitmq.TopologyDeclaration
 import freskog.effects.infra.rabbitmq.consumer._
 import freskog.effects.infra.rabbitmq.publisher._
-import scalaz.zio.ZIO
+import zio.ZIO
 
 trait InfraApi extends Serializable {
   val infraApi: InfraApi.Service

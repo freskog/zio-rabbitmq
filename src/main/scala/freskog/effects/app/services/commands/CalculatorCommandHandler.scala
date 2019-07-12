@@ -2,7 +2,7 @@ package freskog.effects.app.services.commands
 
 import freskog.effects.app.dto._
 import freskog.effects.domain.calculator._
-import scalaz.zio.{Ref, ZIO}
+import zio.{Ref, ZIO}
 
 trait CalculatorCommandHandler extends Serializable {
   val calculatorCommandHandler: CalculatorCommandHandler.Service

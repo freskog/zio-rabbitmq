@@ -1,6 +1,6 @@
 package freskog.effects.infra.rabbitmq
 
-import scalaz.zio.ZIO
+import zio.ZIO
 
 package object consumer {
 

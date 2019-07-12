@@ -1,7 +1,7 @@
 package freskog.effects.infra.rabbitmq.events
 
 import com.rabbitmq.client.{ConfirmListener, ShutdownListener, ShutdownSignalException, Consumer => RConsumer}
-import scalaz.zio.Promise
+import zio.Promise
 
 sealed abstract class AmqpEvent
 case class ExchangeDeclared(name:String, `type`:String) extends AmqpEvent

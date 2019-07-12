@@ -5,7 +5,7 @@ import java.io.IOException
 import freskog.effects.infra.rabbitmq.BaseSpec
 import freskog.effects.infra.rabbitmq.consumer.LiveConsumer._
 import freskog.effects.infra.rabbitmq.events._
-import scalaz.zio.{ Promise, ZIO }
+import zio.{ Promise, ZIO }
 
 class UserFunctionSpec extends BaseSpec {
 

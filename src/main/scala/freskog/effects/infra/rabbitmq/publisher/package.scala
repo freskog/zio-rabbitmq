@@ -2,7 +2,7 @@ package freskog.effects.infra.rabbitmq
 
 import java.io.IOException
 
-import scalaz.zio._
+import zio._
 
 package object publisher {
 

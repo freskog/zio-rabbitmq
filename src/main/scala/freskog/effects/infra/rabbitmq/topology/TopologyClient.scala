@@ -5,7 +5,7 @@ import java.io.IOException
 import com.rabbitmq.client.{BuiltinExchangeType, ConnectionFactory}
 import freskog.effects.infra.rabbitmq.admin._
 import freskog.effects.infra.rabbitmq.events._
-import scalaz.zio.{ZIO, ZManaged}
+import zio.{ZIO, ZManaged}
 
 trait TopologyClient extends Serializable {
   val topologyClient: TopologyClient.Service

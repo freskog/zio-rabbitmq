@@ -1,6 +1,6 @@
 package freskog.effects.infra
 
-import scalaz.zio.ZIO
+import zio.ZIO
 
 package object logger {
 

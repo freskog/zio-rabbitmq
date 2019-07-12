@@ -6,9 +6,9 @@ import java.util
 import com.rabbitmq.client.{ Consumer => RConsumer, _ }
 import freskog.effects.infra.logger._
 import freskog.effects.infra.rabbitmq.events._
-import scalaz.zio._
-import scalaz.zio.blocking._
-import scalaz.zio.clock._
+import zio._
+import zio.blocking._
+import zio.clock._
 
 import scala.concurrent.TimeoutException
 

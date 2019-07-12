@@ -2,7 +2,7 @@ package freskog.effects.infra.rabbitmq.consumer
 
 import com.rabbitmq.client.ConnectionFactory
 import freskog.effects.infra.rabbitmq.topology._
-import scalaz.zio._
+import zio._
 
 trait Consumer extends Serializable {
   val consumer: Consumer.Service
