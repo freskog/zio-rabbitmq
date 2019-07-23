@@ -6,7 +6,7 @@ import com.rabbitmq.client._
 import freskog.effects.infra.logger.{ debug, error, warn, Logger }
 import freskog.effects.infra.rabbitmq.Schedules
 import freskog.effects.infra.rabbitmq.admin._
-import freskog.effects.infra.rabbitmq.events._
+import freskog.effects.infra.rabbitmq.observer._
 import freskog.effects.infra.rabbitmq.topology.{ createTopology, Declaration, TopologyClient }
 import zio.clock.Clock
 import zio.{ Fiber, IO, Promise, Queue, RefM, Runtime, UIO, ZIO, ZManaged }
@@ -20,18 +20,18 @@ object LivePublisher {
   val emptyProps: AMQP.BasicProperties  = new AMQP.BasicProperties.Builder().build()
   val messageQueue: UIO[Queue[Message]] = Queue.bounded[Message](maxInFlight)
 
-  type PublisherEnv = AdminClient with TopologyClient with Events with Inflight with Clock with Logger
+  type PublisherEnv = AdminClient with TopologyClient with Observer with Inflight with Clock with Logger
 
   def livePublisherEnv(cf: ConnectionFactory, name: String, loggerEnv: Logger): ZManaged[Any, IOException, PublisherEnv] =
     for {
       adminEnv    <- AdminClient.makeLiveAdminClient(cf, name)
-      eventsEnv   <- Events.makeEvents.toManaged_
+      eventsEnv   <- Observer.makeObserver.toManaged_
       inflight    <- RefM.make[Map[Long, Promise[IOException, Unit]]](Map.empty).toManaged_
       topologyEnv = TopologyClient.makeLiveTopologyClientFrom(adminEnv, eventsEnv)
-    } yield new AdminClient with TopologyClient with Events with Inflight with Clock.Live with Logger {
+    } yield new AdminClient with TopologyClient with Observer with Inflight with Clock.Live with Logger {
       override val adminClient: AdminClient.Service                       = adminEnv.adminClient
       override val topologyClient: TopologyClient.Service                 = topologyEnv.topologyClient
-      override val events: Events.Service                                 = eventsEnv.events
+      override val observer: Observer.Service                                 = eventsEnv.observer
       override val toConfirm: RefM[Map[Long, Promise[IOException, Unit]]] = inflight
       override val logger: Logger.Service                                 = loggerEnv.logger
     }
@@ -67,8 +67,8 @@ object LivePublisher {
     for {
       messages  <- messageQueue
       prefix    = s"Publisher (no-confirms) on '$exchange'"
-      logger    = subscribe(log(prefix))
-      events    = subscribeSome(handleBrokerEventWithoutConfirms(messages))
+      logger    = listenTo(log(prefix))
+      events    = listenToSome(handleBrokerEventWithoutConfirms(messages))
       publisher = logger *> events *> createTopology(decl) *> withoutConfirms(exchange, messages)
       _         <- publisherFiber(cf, exchange, publisher)
     } yield createUserPublishFn(messages)
@@ -77,8 +77,8 @@ object LivePublisher {
     for {
       messages  <- messageQueue
       prefix    = s"Publisher (confirms) on '$exchange'"
-      logger    = subscribe(log(prefix))
-      events    = subscribeSome(handleBrokerEvent(messages))
+      logger    = listenTo(log(prefix))
+      events    = listenToSome(handleBrokerEvent(messages))
       publisher = logger *> events *> createTopology(decl) *> withConfirms(exchange, messages)
       _         <- publisherFiber(cf, exchange, publisher)
     } yield createUserPublishFn(messages)
@@ -96,21 +96,21 @@ object LivePublisher {
         .foldCauseM(cause => m.confirmed.fail(new IOException(cause.squash)), _ => m.confirmed.succeed(()))
     }.forever
 
-  def withConfirms(exchange: String, messages: Queue[Message]): ZIO[Inflight with AdminClient with Events, IOException, Unit] =
+  def withConfirms(exchange: String, messages: Queue[Message]): ZIO[Inflight with AdminClient with Observer, IOException, Unit] =
     (for {
-      rts      <- ZIO.runtime[Events]
+      rts      <- ZIO.runtime[Observer]
       listener <- makeListeners(rts, exchange)
-      _        <- addConfirmListener(listener) tap publish
-      _        <- addShutdownListener(listener) tap publish
-      _        <- confirmSelect tap publish
+      _        <- addConfirmListener(listener) tap notifyOf
+      _        <- addShutdownListener(listener) tap notifyOf
+      _        <- confirmSelect tap notifyOf
     } yield ()) <* publishMsg(exchange, messages).forever
 
-  def publishMsg(ex: String, messages: Queue[Message]): ZIO[Inflight with AdminClient with Events, IOException, Unit] =
+  def publishMsg(ex: String, messages: Queue[Message]): ZIO[Inflight with AdminClient with Observer, IOException, Unit] =
     for {
       msg   <- messages.take
-      seqNo <- getNextPublishSeqNo tap publish
+      seqNo <- getNextPublishSeqNo tap notifyOf
       _     <- updateInflight(m => ZIO.succeed(m.updated(seqNo.seqNo, msg.confirmed)))
-      _     <- basicPublish(ex, "", msg.body.getBytes()) tap publish
+      _     <- basicPublish(ex, "", msg.body.getBytes()) tap notifyOf
     } yield ()
 
   def publisherFiber(cf: ConnectionFactory, name: String, publish: ZIO[PublisherEnv, IOException, Unit]): UIO[Fiber[Nothing, Unit]] =
@@ -134,18 +134,18 @@ object LivePublisher {
     case PublisherShutdownReceived(_, reason) => sendPoisonPill(reason, messages)
   }
 
-  def makeListeners(rts: Runtime[Events], name: String): UIO[ConfirmListener with ShutdownListener] =
+  def makeListeners(rts: Runtime[Observer], name: String): UIO[ConfirmListener with ShutdownListener] =
     ZIO.effectTotal {
       new ConfirmListener with ShutdownListener {
 
         override def handleAck(deliveryTag: Long, multiple: Boolean): Unit =
-          rts.unsafeRun(publish(MessageAcked(deliveryTag, multiple)))
+          rts.unsafeRun(notifyOf(MessageAcked(deliveryTag, multiple)))
 
         override def handleNack(deliveryTag: Long, multiple: Boolean): Unit =
-          rts.unsafeRun(publish(MessageNacked(deliveryTag, multiple, requeue = false)))
+          rts.unsafeRun(notifyOf(MessageNacked(deliveryTag, multiple, requeue = false)))
 
         override def shutdownCompleted(cause: ShutdownSignalException): Unit =
-          rts.unsafeRun(publish(PublisherShutdownReceived(name, cause)))
+          rts.unsafeRun(notifyOf(PublisherShutdownReceived(name, cause)))
       }
     }
 

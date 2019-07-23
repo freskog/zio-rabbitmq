@@ -4,7 +4,7 @@ import java.io.IOException
 
 import freskog.effects.infra.rabbitmq.BaseSpec
 import freskog.effects.infra.rabbitmq.consumer.LiveConsumer._
-import freskog.effects.infra.rabbitmq.events._
+import freskog.effects.infra.rabbitmq.observer._
 import zio.{ Promise, ZIO }
 
 class UserFunctionSpec extends BaseSpec {
@@ -16,10 +16,10 @@ class UserFunctionSpec extends BaseSpec {
       for {
         m <- messageQueue
         p <- Promise.make[IOException, Unit]
-        _ <- subscribeSome { case MessageAcked(0, false) => p.succeed(()).unit }
-        _ <- subscribeSome(handleEventFromBroker(m))
-        _ <- consumeWithUserFunction(ZIO.succeed(_), m).fork
-        _ <- publish(MessageReceived(0, redelivered = false, "I-didn't-really-receive-this"))
+        _ <- listenToSome { case MessageAcked(0, false) => p.succeed(()).unit }
+        _ <- listenToSome(handleEventFromBroker(m))
+        _ <- consumeWithUserFunction(_ => ZIO.unit, m).unit.fork
+        _ <- notifyOf(MessageReceived(0, redelivered = false, "I-didn't-really-receive-this"))
         _ <- p.await
       } yield succeed
     }
@@ -30,10 +30,10 @@ class UserFunctionSpec extends BaseSpec {
       for {
         m <- messageQueue
         p <- Promise.make[IOException, Unit]
-        _ <- subscribeSome(handleEventFromBroker(m))
-        _ <- subscribeSome { case MessageNacked(0, false, true) => p.succeed(()).unit }
-        _ <- consumeWithUserFunction(_ => ZIO.fail("Oh noes, a user error!"), m).fork
-        _ <- publish(MessageReceived(0, redelivered = false, "I-didn't-really-receive-this"))
+        _ <- listenToSome(handleEventFromBroker(m))
+        _ <- listenToSome { case MessageNacked(0, false, true) => p.succeed(()).unit }
+        _ <- consumeWithUserFunction(_ => ZIO.fail("Oh noes, a user error!"), m).fork.unit
+        _ <- notifyOf(MessageReceived(0, redelivered = false, "I-didn't-really-receive-this"))
         _ <- p.await
       } yield succeed
     }
@@ -44,10 +44,10 @@ class UserFunctionSpec extends BaseSpec {
       for {
         m <- messageQueue
         p <- Promise.make[IOException, Unit]
-        _ <- subscribeSome(handleEventFromBroker(m))
-        _ <- subscribeSome { case MessageNacked(0, false, false) => p.succeed(()).unit }
+        _ <- listenToSome(handleEventFromBroker(m))
+        _ <- listenToSome { case MessageNacked(0, false, false) => p.succeed(()).unit }
         _ <- consumeWithUserFunction(_ => ZIO.fail("Oh noes, a user error!"), m).fork
-        _ <- publish(MessageReceived(0, redelivered = true, "I-didn't-really-receive-this"))
+        _ <- notifyOf(MessageReceived(0, redelivered = true, "I-didn't-really-receive-this"))
         _ <- p.await
       } yield succeed
     }

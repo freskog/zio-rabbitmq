@@ -1,7 +1,7 @@
 package freskog.effects.infra.rabbitmq.consumer
 
 import freskog.effects.infra.rabbitmq.BaseSpec
-import freskog.effects.infra.rabbitmq.events._
+import freskog.effects.infra.rabbitmq.observer._
 import zio.ZIO
 
 class CallbackConsumerSpec extends BaseSpec {

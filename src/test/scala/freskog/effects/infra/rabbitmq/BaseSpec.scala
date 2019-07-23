@@ -6,7 +6,7 @@ import java.util.concurrent.TimeUnit
 import com.rabbitmq.client.ShutdownSignalException
 import freskog.effects.infra.logger.Logger
 import freskog.effects.infra.rabbitmq.admin.AdminClient
-import freskog.effects.infra.rabbitmq.events._
+import freskog.effects.infra.rabbitmq.observer._
 import freskog.effects.infra.rabbitmq.publisher.LivePublisher.Inflight
 import org.scalatest.exceptions.TestFailedException
 import org.scalatest.{ Assertion, DiagrammedAssertions, FlatSpec, Matchers }
@@ -22,19 +22,19 @@ import scala.concurrent.TimeoutException
 
 abstract class BaseSpec extends FlatSpec with DiagrammedAssertions with Matchers {
 
-  type TestEnv = AdminClient with Events with Clock with Inflight with Logger
+  type TestEnv = AdminClient with Observer with Clock with Inflight with Logger
 
   def testEnv(queue: List[Option[String]]): UIO[TestEnv] =
     for {
-      eventsEnv <- Events.makeEvents
+      eventsEnv <- Observer.makeObserver
       seqNoRef  <- Ref.make[Long](0)
       pending   <- enqueueAsEvents(queue)
       inflight  <- RefM.make[Map[Long, Promise[IOException, Unit]]](Map.empty)
       log       <- Logger.makeLogger("Tests")
-    } yield new Clock with Events with FakeAdminClient with Inflight with Logger {
+    } yield new Clock with Observer with FakeAdminClient with Inflight with Logger {
       override val messageQueue: Queue[Option[MessageReceived]]              = pending
       override val seqNo: Ref[Long]                                          = seqNoRef
-      override val events: Events.Service                                    = eventsEnv.events
+      override val observer: Observer.Service                                    = eventsEnv.observer
       override val clock: Clock.Service[Any]                                 = Clock.Live.clock
       override val toConfirm: RefM[Map[FiberId, Promise[IOException, Unit]]] = inflight
       override val logger: Logger.Service                                    = log.logger
@@ -60,8 +60,11 @@ abstract class BaseSpec extends FlatSpec with DiagrammedAssertions with Matchers
 
   def run[E <: Throwable, A](queued: List[String])(z: ZIO[TestEnv, E, A]): A =
     realRts.unsafeRun(
-      testEnv(queued.map(Option(_))) >>=
-        z.interruptChildren.timeoutFail(new TimeoutException("Test didn't complete"))(Duration(3, TimeUnit.SECONDS)).provide)
+      for {
+        env <- testEnv(queued.map(Option(_)))
+        res <- z.interruptChildren.timeoutFail(new TimeoutException("Test didn't complete"))(Duration(3, TimeUnit.SECONDS)).provide(env)
+      } yield res
+    )
 
   val done: ZIO[TestEnv, Nothing, Boolean]     = ZIO.succeed(true)
   val continue: ZIO[TestEnv, Nothing, Boolean] = ZIO.succeed(false)
@@ -81,7 +84,7 @@ abstract class BaseSpec extends FlatSpec with DiagrammedAssertions with Matchers
     run(queued) {
       for {
         p <- Promise.make[TestFailedException, Unit]
-        _ <- subscribe[TestEnv](pf.applyOrElse(_, failWith(p)) >>= (end => if (end) p.succeed(()).unit else UIO.unit))
+        _ <- listenTo[TestEnv](pf.applyOrElse(_, failWith(p)) >>= (end => if (end) p.succeed(()).unit else UIO.unit))
         _ <- z.fork
         _ <- p.await
       } yield succeed
@@ -93,7 +96,7 @@ abstract class BaseSpec extends FlatSpec with DiagrammedAssertions with Matchers
         p         <- Promise.make[TestFailedException, Unit]
         received  <- Ref.make[List[AmqpEvent]](Nil)
         remaining <- Ref.make[List[AmqpEvent]](expected)
-        _ <- subscribe { ev =>
+        _ <- listenTo { ev =>
               ZIO.whenM(remaining.get.map(_.nonEmpty)) {
                 for {
                   currReceived  <- received.get

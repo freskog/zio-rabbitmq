@@ -4,7 +4,7 @@ import java.io.IOException
 
 import com.rabbitmq.client.{ ConfirmListener, ShutdownListener }
 import freskog.effects.infra.rabbitmq.BaseSpec
-import freskog.effects.infra.rabbitmq.events.{ ConfirmListenerAdded, _ }
+import freskog.effects.infra.rabbitmq.observer.{ ConfirmListenerAdded, _ }
 import freskog.effects.infra.rabbitmq.publisher.LivePublisher._
 import zio._
 
@@ -18,8 +18,8 @@ class PublisherWithConfirmsSpec extends BaseSpec {
         messages    <- messageQueue
         listenerRef <- Ref.make[Option[ConfirmListener]](None)
         _           <- withConfirms("test-exchange", messages).fork
-        _           <- subscribeSome(handleBrokerEvent(messages))
-        _ <- subscribeSome {
+        _           <- listenToSome(handleBrokerEvent(messages))
+        _ <- listenToSome {
               case ConfirmListenerAdded(listener)                        => listenerRef.set(Some(listener))
               case MessagePublished("test-exchange", "", "some-payload") => listenerRef.get.map(_.get.handleAck(0, false))
             }
@@ -35,8 +35,8 @@ class PublisherWithConfirmsSpec extends BaseSpec {
       for {
         messages    <- messageQueue
         listenerRef <- Ref.make[Option[ConfirmListener]](None)
-        _           <- subscribeSome(handleBrokerEvent(messages))
-        _ <- subscribeSome {
+        _           <- listenToSome(handleBrokerEvent(messages))
+        _ <- listenToSome {
               case ConfirmListenerAdded(listener)                        => listenerRef.set(Some(listener))
               case MessagePublished("test-exchange", "", "some-payload") => listenerRef.get.map(_.get.handleNack(0, false))
             }
@@ -53,8 +53,8 @@ class PublisherWithConfirmsSpec extends BaseSpec {
       for {
         messages    <- messageQueue
         listenerRef <- Ref.make[Option[ShutdownListener]](None)
-        _           <- subscribeSome(handleBrokerEvent(messages))
-        _           <- subscribeSome { case ShutdownListenerAdded(listener) => listenerRef.set(Some(listener)) }
+        _           <- listenToSome(handleBrokerEvent(messages))
+        _           <- listenToSome { case ShutdownListenerAdded(listener) => listenerRef.set(Some(listener)) }
         _           <- withConfirms("test-exchange", messages).ensuring(listenerRef.get.map(_.get.shutdownCompleted(sig))).fork
         promise     <- Promise.make[IOException, Unit]
         _           <- messages.offer(Message(promise, "fake-an-error-on-publish"))

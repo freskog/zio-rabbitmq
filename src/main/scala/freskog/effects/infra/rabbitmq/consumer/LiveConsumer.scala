@@ -6,25 +6,25 @@ import com.rabbitmq.client.{ AMQP, ConnectionFactory, Envelope, ShutdownSignalEx
 import freskog.effects.infra.logger._
 import freskog.effects.infra.rabbitmq._
 import freskog.effects.infra.rabbitmq.admin._
-import freskog.effects.infra.rabbitmq.events._
+import freskog.effects.infra.rabbitmq.observer._
 import freskog.effects.infra.rabbitmq.topology.{ createTopology, Declaration, TopologyClient }
 import zio.clock.Clock
 import zio.{ Fiber, Promise, Queue, Runtime, UIO, ZIO, ZManaged }
 
 object LiveConsumer {
 
-  type ConsumerEnv = AdminClient with TopologyClient with Events with Clock with Logger
+  type ConsumerEnv = AdminClient with TopologyClient with Observer with Clock with Logger
 
   def liveConsumerEnv(cf: ConnectionFactory, name: String): ZManaged[Any, IOException, ConsumerEnv] =
     for {
       adminEnv    <- AdminClient.makeLiveAdminClient(cf, name)
-      eventsEnv   <- Events.makeEvents.toManaged_
+      eventsEnv   <- Observer.makeObserver.toManaged_
       topologyEnv = TopologyClient.makeLiveTopologyClientFrom(adminEnv, eventsEnv)
       loggerEnv   <- Logger.makeLogger("Consumer").toManaged_
-    } yield new AdminClient with TopologyClient with Events with Logger with Clock.Live {
+    } yield new AdminClient with TopologyClient with Observer with Logger with Clock.Live {
       override val adminClient: AdminClient.Service       = adminEnv.adminClient
       override val topologyClient: TopologyClient.Service = topologyEnv.topologyClient
-      override val events: Events.Service                 = eventsEnv.events
+      override val observer: Observer.Service                 = eventsEnv.observer
       override val logger: Logger.Service                 = loggerEnv.logger
     }
 
@@ -61,8 +61,8 @@ object LiveConsumer {
     for {
       messages     <- messageQueue
       init         = createTopology(decl)
-      logger       = subscribe(log(s"Consumer on '$queueName'"))
-      brokerEvents = subscribeSome(handleEventFromBroker(messages))
+      logger       = listenTo(log(s"Consumer on '$queueName'"))
+      brokerEvents = listenToSome(handleEventFromBroker(messages))
       consumer     = brokerEvents *> logger *> init *> strategy
       _            <- consumerFiber(cf, queueName, consumer)
     } yield messages
@@ -70,11 +70,11 @@ object LiveConsumer {
   def consumeWithUserFunction[R, E](userFunction: String => ZIO[R, E, Unit], messages: Queue[AmqpMessage]): ZIO[R, E, Nothing] =
     messages.take.flatMap(msg => userFunction(msg.body).sandbox.foldCauseM(_ => msg.nack, _ => msg.ack)).forever
 
-  def ack(tag: Long): ZIO[Events with AdminClient with Logger, Nothing, Unit] =
-    basicAck(tag, multiple = false).tap(publish).unit.catchAll[Events with AdminClient with Logger, Nothing, Unit](throwable)
+  def ack(tag: Long): ZIO[Observer with AdminClient with Logger, Nothing, Unit] =
+    basicAck(tag, multiple = false).tap(notifyOf).unit.catchAll[Observer with AdminClient with Logger, Nothing, Unit](throwable)
 
-  def nack(tag: Long, redelivered: Boolean): ZIO[Events with AdminClient with Logger, Nothing, Unit] =
-    basicNack(tag, multiple = false, requeue = !redelivered).tap(publish).unit.catchAll[Events with AdminClient with Logger, Nothing, Unit](throwable)
+  def nack(tag: Long, redelivered: Boolean): ZIO[Observer with AdminClient with Logger, Nothing, Unit] =
+    basicNack(tag, multiple = false, requeue = !redelivered).tap(notifyOf).unit.catchAll[Observer with AdminClient with Logger, Nothing, Unit](throwable)
 
   def log(prefix: String)(event: AmqpEvent): ZIO[Logger, Nothing, Unit] = event match {
     case SubscriberCancelledByUser(_, _)   => warn(s"$prefix - $event")
@@ -84,13 +84,13 @@ object LiveConsumer {
     case _: AmqpEvent                      => debug(s"$prefix - $event")
   }
 
-  def handleEventFromBroker(messages: Queue[AmqpMessage]): PartialFunction[AmqpEvent, ZIO[Events with AdminClient with Logger, Nothing, Unit]] = {
+  def handleEventFromBroker(messages: Queue[AmqpMessage]): PartialFunction[AmqpEvent, ZIO[Observer with AdminClient with Logger, Nothing, Unit]] = {
     case SubscriberCancelledByUser(_, stopped)   => stopped.succeed(()).unit
     case SubscriberCancelledByBroker(_, stopped) => stopped.succeed(()).unit
     case ConsumerShutdownReceived(_, _, stopped) => stopped.succeed(()).unit
     case MessageReceived(seqNo, redelivered, payload) =>
       for {
-        env <- ZIO.environment[Events with AdminClient with Logger]
+        env <- ZIO.environment[Observer with AdminClient with Logger]
         msg = AmqpMessage(payload, ack(seqNo).provide(env), nack(seqNo, redelivered).provide(env))
         _   <- messages.offer(msg)
       } yield ()
@@ -99,39 +99,39 @@ object LiveConsumer {
   def consumerFiber[A](cf: ConnectionFactory, name: String, consumer: ZIO[ConsumerEnv, IOException, A]): UIO[Fiber[Nothing, Nothing]] =
     retryEnv >>= (env => liveConsumerEnv(cf, name).use(consumer.provide).sandbox.retry(Schedules.restartFiber(name)).provide(env).option.forever.fork)
 
-  def pollForNewMessages(queueName: String): ZIO[AdminClient with Events with Clock, IOException, Nothing] =
-    basicGet(queueName).repeat(Schedules.untilNonEmpty).tap(publish).forever
+  def pollForNewMessages(queueName: String): ZIO[AdminClient with Observer with Clock, IOException, Nothing] =
+    basicGet(queueName).repeat(Schedules.untilNonEmpty).tap(notifyOf).forever
 
-  def initializeConsumerOn(queueName: String): ZIO[AdminClient with Events, IOException, Unit] =
+  def initializeConsumerOn(queueName: String): ZIO[AdminClient with Observer, IOException, Unit] =
     for {
-      rts            <- ZIO.runtime[Events]
+      rts            <- ZIO.runtime[Observer]
       stopped        <- Promise.make[Nothing, Unit]
-      _              <- basicQos(maxInFlight) tap publish
+      _              <- basicQos(maxInFlight) tap notifyOf
       rabbitConsumer <- makeRabbitConsumer(rts, stopped)
-      _              <- basicConsume(queueName, rabbitConsumer) tap publish
+      _              <- basicConsume(queueName, rabbitConsumer) tap notifyOf
       _              <- stopped.await
     } yield ()
 
-  def makeRabbitConsumer(rts: Runtime[Events], stopped: Promise[Nothing, Unit]): UIO[RConsumer] =
+  def makeRabbitConsumer(rts: Runtime[Observer], stopped: Promise[Nothing, Unit]): UIO[RConsumer] =
     ZIO.effectTotal {
       new RConsumer {
         override def handleConsumeOk(consumerTag: String): Unit =
-          rts.unsafeRun(publish(ConsumerStarted(consumerTag)))
+          rts.unsafeRun(notifyOf(ConsumerStarted(consumerTag)))
 
         override def handleRecoverOk(consumerTag: String): Unit =
-          rts.unsafeRun(publish(ConsumerRecovered(consumerTag)))
+          rts.unsafeRun(notifyOf(ConsumerRecovered(consumerTag)))
 
         override def handleCancelOk(consumerTag: String): Unit =
-          rts.unsafeRun(publish(SubscriberCancelledByUser(consumerTag, stopped)))
+          rts.unsafeRun(notifyOf(SubscriberCancelledByUser(consumerTag, stopped)))
 
         override def handleCancel(consumerTag: String): Unit =
-          rts.unsafeRun(publish(SubscriberCancelledByBroker(consumerTag, stopped)))
+          rts.unsafeRun(notifyOf(SubscriberCancelledByBroker(consumerTag, stopped)))
 
         override def handleShutdownSignal(consumerTag: String, sig: ShutdownSignalException): Unit =
-          rts.unsafeRun(publish(ConsumerShutdownReceived(consumerTag, sig, stopped)))
+          rts.unsafeRun(notifyOf(ConsumerShutdownReceived(consumerTag, sig, stopped)))
 
         override def handleDelivery(consumerTag: String, envelope: Envelope, properties: AMQP.BasicProperties, body: Array[Byte]): Unit =
-          rts.unsafeRun(publish(MessageReceived(envelope.getDeliveryTag, envelope.isRedeliver, new String(body, "UTF-8"))))
+          rts.unsafeRun(notifyOf(MessageReceived(envelope.getDeliveryTag, envelope.isRedeliver, new String(body, "UTF-8"))))
       }
     }
 }

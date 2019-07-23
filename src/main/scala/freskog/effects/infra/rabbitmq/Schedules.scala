@@ -4,7 +4,7 @@ import java.io.IOException
 import java.util.concurrent.TimeUnit
 
 import freskog.effects.infra.logger._
-import freskog.effects.infra.rabbitmq.events.MessageReceived
+import freskog.effects.infra.rabbitmq.observer.MessageReceived
 import zio.console.{ putStrLn, Console }
 import zio.duration.Duration
 import zio.{ Cause, Schedule, UIO, ZSchedule }

@@ -3,7 +3,7 @@ package freskog.effects.infra.rabbitmq
 import java.io.IOException
 
 import com.rabbitmq.client.{ BuiltinExchangeType, ConfirmListener, ShutdownListener, Consumer => RConsumer }
-import freskog.effects.infra.rabbitmq.events._
+import freskog.effects.infra.rabbitmq.observer._
 import zio.ZIO
 
 package object admin {

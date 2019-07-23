@@ -1,4 +1,4 @@
-package freskog.effects.infra.rabbitmq.events
+package freskog.effects.infra.rabbitmq.observer
 
 import com.rabbitmq.client.{ConfirmListener, ShutdownListener, ShutdownSignalException, Consumer => RConsumer}
 import zio.Promise

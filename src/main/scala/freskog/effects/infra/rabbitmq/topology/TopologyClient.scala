@@ -4,7 +4,7 @@ import java.io.IOException
 
 import com.rabbitmq.client.{BuiltinExchangeType, ConnectionFactory}
 import freskog.effects.infra.rabbitmq.admin._
-import freskog.effects.infra.rabbitmq.events._
+import freskog.effects.infra.rabbitmq.observer._
 import zio.{ZIO, ZManaged}
 
 trait TopologyClient extends Serializable {
@@ -17,25 +17,25 @@ object TopologyClient extends Serializable { self =>
   }
 
   def makeLiveTopologyClient(cf: ConnectionFactory, name: String): ZManaged[Any, IOException, TopologyClient] =
-    (AdminClient.makeLiveAdminClient(cf, name) zipWith Events.makeEvents.toManaged_)(makeLiveTopologyClientFrom)
+    (AdminClient.makeLiveAdminClient(cf, name) zipWith Observer.makeObserver.toManaged_)(makeLiveTopologyClientFrom)
 
-  def makeLiveTopologyClientFrom(adminEnv: AdminClient, eventsEnv: Events):TopologyClient =
+  def makeLiveTopologyClientFrom(adminEnv: AdminClient, eventsEnv: Observer):TopologyClient =
     new TopologyClient {
       override val topologyClient: Service = (decl: Declaration) =>
         createTopology(decl).provide {
-          new AdminClient with Events {
+          new AdminClient with Observer {
             override val adminClient: AdminClient.Service = adminEnv.adminClient
-            override val events: Events.Service = eventsEnv.events
+            override val observer: Observer.Service = eventsEnv.observer
           }
         }
     }
 
-  def createTopology(declaredTopology: Declaration): ZIO[AdminClient with Events, IOException, Unit] =
+  def createTopology(declaredTopology: Declaration): ZIO[AdminClient with Observer, IOException, Unit] =
     for {
-      _ <- ZIO.foreach(declaredTopology.queues.map(_.name))(queueDeclare(_) tap publish)
-      _ <- ZIO.foreach(declaredTopology.exchanges.map(_.name))(exchangeDeclare(_, BuiltinExchangeType.FANOUT) tap publish)
+      _ <- ZIO.foreach(declaredTopology.queues.map(_.name))(queueDeclare(_) tap notifyOf)
+      _ <- ZIO.foreach(declaredTopology.exchanges.map(_.name))(exchangeDeclare(_, BuiltinExchangeType.FANOUT) tap notifyOf)
       _ <- ZIO.foreach(declaredTopology.bindings) {
-            case (AmqpQueue(queueName), FanoutExchange(exchangeName)) => queueBind(queueName, exchangeName, "") tap publish
+            case (AmqpQueue(queueName), FanoutExchange(exchangeName)) => queueBind(queueName, exchangeName, "") tap notifyOf
           }
     } yield ()
 }

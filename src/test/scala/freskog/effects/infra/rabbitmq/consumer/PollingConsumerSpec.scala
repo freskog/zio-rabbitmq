@@ -1,7 +1,7 @@
 package freskog.effects.infra.rabbitmq.consumer
 
 import freskog.effects.infra.rabbitmq.BaseSpec
-import freskog.effects.infra.rabbitmq.events.MessageReceived
+import freskog.effects.infra.rabbitmq.observer.MessageReceived
 
 class PollingConsumerSpec extends BaseSpec {
 

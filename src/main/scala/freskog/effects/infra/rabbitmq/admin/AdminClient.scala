@@ -5,7 +5,7 @@ import java.util
 
 import com.rabbitmq.client.{ Consumer => RConsumer, _ }
 import freskog.effects.infra.logger._
-import freskog.effects.infra.rabbitmq.events._
+import freskog.effects.infra.rabbitmq.observer._
 import zio._
 import zio.blocking._
 import zio.clock._
