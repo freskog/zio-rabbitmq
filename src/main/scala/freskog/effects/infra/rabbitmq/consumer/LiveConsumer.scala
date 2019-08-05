@@ -2,136 +2,83 @@ package freskog.effects.infra.rabbitmq.consumer
 
 import java.io.IOException
 
-import com.rabbitmq.client.{ AMQP, ConnectionFactory, Envelope, ShutdownSignalException, Consumer => RConsumer }
-import freskog.effects.infra.logger._
-import freskog.effects.infra.rabbitmq._
-import freskog.effects.infra.rabbitmq.admin._
+import com.rabbitmq.client.{AMQP, Envelope, ShutdownSignalException, Consumer => RConsumer}
+import freskog.effects.app.logger.Logger
+import freskog.effects.infra.rabbitmq.admin.{ClientProvider, _}
 import freskog.effects.infra.rabbitmq.observer._
-import freskog.effects.infra.rabbitmq.topology.{ createTopology, Declaration, TopologyClient }
+import freskog.effects.infra.rabbitmq.topology._
+import freskog.effects.infra.rabbitmq.{ClientFactory, Schedules}
+import zio._
 import zio.clock.Clock
-import zio.{ Fiber, Promise, Queue, Runtime, UIO, ZIO, ZManaged }
 
 object LiveConsumer {
 
-  type ConsumerEnv = AdminClient with TopologyClient with Observer with Clock with Logger
-
-  def liveConsumerEnv(cf: ConnectionFactory, name: String): ZManaged[Any, IOException, ConsumerEnv] =
-    for {
-      adminEnv    <- AdminClient.makeLiveAdminClient(cf, name)
-      eventsEnv   <- Observer.makeObserver.toManaged_
-      topologyEnv = TopologyClient.makeLiveTopologyClientFrom(adminEnv, eventsEnv)
-      loggerEnv   <- Logger.makeLogger("Consumer").toManaged_
-    } yield new AdminClient with TopologyClient with Observer with Logger with Clock.Live {
-      override val adminClient: AdminClient.Service       = adminEnv.adminClient
-      override val topologyClient: TopologyClient.Service = topologyEnv.topologyClient
-      override val observer: Observer.Service                 = eventsEnv.observer
-      override val logger: Logger.Service                 = loggerEnv.logger
-    }
-
-  val retryEnv: ZIO[Any, Nothing, Logger with Clock.Live] =
-    Logger
-      .makeLogger("Consumer")
-      .map(
-        env =>
-          new Logger with Clock.Live {
-            override val logger: Logger.Service = env.logger
-          }
-      )
+  type ConsumerEnv = Clock with Logger with Observer with ClientProvider
 
   val maxInFlight: Int = 10
 
-  case class AmqpMessage(body: String, ack: ZIO[Any, Nothing, Unit], nack: ZIO[Any, Nothing, Unit])
+  def consume(topology: Declaration, queueName: String)(userFn: String => ZIO[Any, Nothing, Unit]): ZIO[ConsumerEnv, Nothing, Unit] =
+    consumerFiber(topology, queueName) *> handleSome {
+      case MessageReceived(payload, ack, nack) => userFn(payload).sandbox.foldCauseM(_ => nack, _ => ack)
+    }
 
-  val messageQueue: UIO[Queue[AmqpMessage]] = Queue.bounded[AmqpMessage](maxInFlight)
+  def consumerFiber(topology: Declaration, name: String): ZIO[ConsumerEnv, Nothing, Fiber[Nothing, Nothing]] =
+    ClientFactory
+      .buildClientsFor(name)
+      .use(initializeConsumerOn(topology, name).provide)
+      .sandbox
+      .retry(Schedules.loggingRetries(name))
+      .option
+      .forever
+      .fork
 
-  def consumeWith[R, E](
-    cf: ConnectionFactory,
-    queueName: String,
-    decl: Declaration,
-    strategy: ZIO[ConsumerEnv, IOException, Unit],
-    userFun: String => ZIO[R, E, Unit]
-  ): ZIO[R, E, Nothing] =
-    startConsumer(cf, queueName, decl, strategy) >>= (messages => consumeWithUserFunction(userFun, messages))
-
-
-    def startConsumer(cf: ConnectionFactory,
-                      queueName: String,
-                      decl: Declaration,
-                      strategy: ZIO[ConsumerEnv, IOException, Unit]): ZIO[Any, Nothing, Queue[AmqpMessage]] =
+  def initializeConsumerOn(topology: Declaration, queueName: String): ZIO[TopologyClient with AdminClient with Observer, IOException, Unit] =
     for {
-      messages     <- messageQueue
-      init         = createTopology(decl)
-      logger       = listenTo(log(s"Consumer on '$queueName'"))
-      brokerEvents = listenToSome(handleEventFromBroker(messages))
-      consumer     = brokerEvents *> logger *> init *> strategy
-      _            <- consumerFiber(cf, queueName, consumer)
-    } yield messages
+      _       <- createTopology(topology)
+      rts     <- ZIO.runtime[Observer]
+      env     <- ZIO.environment[AdminClient with Observer]
+      stopped <- Promise.make[IOException, Unit]
+      _       <- basicQos(maxInFlight) tap notifyOf
+      _ <- basicConsume(
+            queueName,
+            new RConsumer {
+              override def handleConsumeOk(consumerTag: String): Unit =
+                rts.unsafeRun(notifyOf(ConsumerStarted(consumerTag)))
 
-  def consumeWithUserFunction[R, E](userFunction: String => ZIO[R, E, Unit], messages: Queue[AmqpMessage]): ZIO[R, E, Nothing] =
-    messages.take.flatMap(msg => userFunction(msg.body).sandbox.foldCauseM(_ => msg.nack, _ => msg.ack)).forever
+              override def handleRecoverOk(consumerTag: String): Unit =
+                rts.unsafeRun(notifyOf(ConsumerRecovered(consumerTag)))
 
-  def ack(tag: Long): ZIO[Observer with AdminClient with Logger, Nothing, Unit] =
-    basicAck(tag, multiple = false).tap(notifyOf).unit.catchAll[Observer with AdminClient with Logger, Nothing, Unit](throwable)
+              override def handleCancelOk(consumerTag: String): Unit =
+                rts.unsafeRun(notifyOf(SubscriberCancelledByUser(consumerTag)) <* stopped.succeed(()))
 
-  def nack(tag: Long, redelivered: Boolean): ZIO[Observer with AdminClient with Logger, Nothing, Unit] =
-    basicNack(tag, multiple = false, requeue = !redelivered).tap(notifyOf).unit.catchAll[Observer with AdminClient with Logger, Nothing, Unit](throwable)
+              override def handleCancel(consumerTag: String): Unit =
+                rts.unsafeRun(notifyOf(SubscriberCancelledByBroker(consumerTag)) <* stopped.fail(new IOException("cancelled by broker")))
 
-  def log(prefix: String)(event: AmqpEvent): ZIO[Logger, Nothing, Unit] = event match {
-    case SubscriberCancelledByUser(_, _)   => warn(s"$prefix - $event")
-    case SubscriberCancelledByBroker(_, _) => error(s"$prefix - $event")
-    case ConsumerShutdownReceived(_, _, _) => error(s"$prefix - $event")
-    case PublisherShutdownReceived(_, _)   => error(s"$prefix - $event")
-    case _: AmqpEvent                      => debug(s"$prefix - $event")
-  }
+              override def handleShutdownSignal(consumerTag: String, sig: ShutdownSignalException): Unit =
+                rts.unsafeRun(notifyOf(ConsumerShutdownReceived(consumerTag, sig)) <* stopped.fail(new IOException(sig)))
 
-  def handleEventFromBroker(messages: Queue[AmqpMessage]): PartialFunction[AmqpEvent, ZIO[Observer with AdminClient with Logger, Nothing, Unit]] = {
-    case SubscriberCancelledByUser(_, stopped)   => stopped.succeed(()).unit
-    case SubscriberCancelledByBroker(_, stopped) => stopped.succeed(()).unit
-    case ConsumerShutdownReceived(_, _, stopped) => stopped.succeed(()).unit
-    case MessageReceived(seqNo, redelivered, payload) =>
-      for {
-        env <- ZIO.environment[Observer with AdminClient with Logger]
-        msg = AmqpMessage(payload, ack(seqNo).provide(env), nack(seqNo, redelivered).provide(env))
-        _   <- messages.offer(msg)
-      } yield ()
-  }
-
-  def consumerFiber[A](cf: ConnectionFactory, name: String, consumer: ZIO[ConsumerEnv, IOException, A]): UIO[Fiber[Nothing, Nothing]] =
-    retryEnv >>= (env => liveConsumerEnv(cf, name).use(consumer.provide).sandbox.retry(Schedules.restartFiber(name)).provide(env).option.forever.fork)
-
-  def pollForNewMessages(queueName: String): ZIO[AdminClient with Observer with Clock, IOException, Nothing] =
-    basicGet(queueName).repeat(Schedules.untilNonEmpty).tap(notifyOf).forever
-
-  def initializeConsumerOn(queueName: String): ZIO[AdminClient with Observer, IOException, Unit] =
-    for {
-      rts            <- ZIO.runtime[Observer]
-      stopped        <- Promise.make[Nothing, Unit]
-      _              <- basicQos(maxInFlight) tap notifyOf
-      rabbitConsumer <- makeRabbitConsumer(rts, stopped)
-      _              <- basicConsume(queueName, rabbitConsumer) tap notifyOf
-      _              <- stopped.await
+              override def handleDelivery(consumerTag: String, envelope: Envelope, properties: AMQP.BasicProperties, body: Array[Byte]): Unit =
+                rts.unsafeRun(
+                  notifyOf(
+                    MessageReceived(
+                      new String(body, "UTF-8"),
+                      ack(envelope.getDeliveryTag).provide(env),
+                      nack(envelope.getDeliveryTag, envelope.isRedeliver).provide(env)
+                    )
+                  )
+                )
+            }
+          ) tap notifyOf
+      _ <- stopped.await
     } yield ()
 
-  def makeRabbitConsumer(rts: Runtime[Observer], stopped: Promise[Nothing, Unit]): UIO[RConsumer] =
-    ZIO.effectTotal {
-      new RConsumer {
-        override def handleConsumeOk(consumerTag: String): Unit =
-          rts.unsafeRun(notifyOf(ConsumerStarted(consumerTag)))
+  def ack(tag: Long): ZIO[Observer with AdminClient, Nothing, Unit] =
+    basicAck(tag, multiple = false).tap(notifyOf).unit.catchAll(handleError)
 
-        override def handleRecoverOk(consumerTag: String): Unit =
-          rts.unsafeRun(notifyOf(ConsumerRecovered(consumerTag)))
+  def nack(tag: Long, redelivered: Boolean): ZIO[Observer with AdminClient, Nothing, Unit] =
+    basicNack(tag, multiple = false, requeue = !redelivered).tap(notifyOf).unit.catchAll(handleError)
 
-        override def handleCancelOk(consumerTag: String): Unit =
-          rts.unsafeRun(notifyOf(SubscriberCancelledByUser(consumerTag, stopped)))
+  def handleError(e: Throwable): ZIO[Observer, Nothing, Unit] =
+    notifyOf(AmqpError(e))
 
-        override def handleCancel(consumerTag: String): Unit =
-          rts.unsafeRun(notifyOf(SubscriberCancelledByBroker(consumerTag, stopped)))
-
-        override def handleShutdownSignal(consumerTag: String, sig: ShutdownSignalException): Unit =
-          rts.unsafeRun(notifyOf(ConsumerShutdownReceived(consumerTag, sig, stopped)))
-
-        override def handleDelivery(consumerTag: String, envelope: Envelope, properties: AMQP.BasicProperties, body: Array[Byte]): Unit =
-          rts.unsafeRun(notifyOf(MessageReceived(envelope.getDeliveryTag, envelope.isRedeliver, new String(body, "UTF-8"))))
-      }
-    }
 }

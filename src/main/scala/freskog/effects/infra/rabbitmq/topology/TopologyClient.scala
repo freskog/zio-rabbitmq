@@ -2,33 +2,32 @@ package freskog.effects.infra.rabbitmq.topology
 
 import java.io.IOException
 
-import com.rabbitmq.client.{BuiltinExchangeType, ConnectionFactory}
+import com.rabbitmq.client.BuiltinExchangeType
 import freskog.effects.infra.rabbitmq.admin._
 import freskog.effects.infra.rabbitmq.observer._
-import zio.{ZIO, ZManaged}
+import zio.{ ZIO, ZManaged }
 
 trait TopologyClient extends Serializable {
-  val topologyClient: TopologyClient.Service
+  val topologyClient: TopologyClient.Service[Any]
 }
 
 object TopologyClient extends Serializable { self =>
-  trait Service extends Serializable {
-    def createTopology(decl: Declaration): ZIO[Any, IOException, Unit]
+  trait Service[R] extends Serializable {
+    def createTopology(topology: Declaration): ZIO[R, IOException, Unit]
   }
 
-  def makeLiveTopologyClient(cf: ConnectionFactory, name: String): ZManaged[Any, IOException, TopologyClient] =
-    (AdminClient.makeLiveAdminClient(cf, name) zipWith Observer.makeObserver.toManaged_)(makeLiveTopologyClientFrom)
-
-  def makeLiveTopologyClientFrom(adminEnv: AdminClient, eventsEnv: Observer):TopologyClient =
-    new TopologyClient {
-      override val topologyClient: Service = (decl: Declaration) =>
-        createTopology(decl).provide {
-          new AdminClient with Observer {
-            override val adminClient: AdminClient.Service = adminEnv.adminClient
-            override val observer: Observer.Service = eventsEnv.observer
+  val createTopologyClient: ZManaged[Observer with AdminClient, Nothing, TopologyClient] =
+    ZManaged
+      .environment[Observer with AdminClient]
+      .map(
+        env =>
+          new TopologyClient {
+            override val topologyClient: Service[Any] = new Service[Any] {
+              override def createTopology(topology: Declaration): ZIO[Any, IOException, Unit] =
+                self.createTopology(topology).provide(env)
+            }
           }
-        }
-    }
+      )
 
   def createTopology(declaredTopology: Declaration): ZIO[AdminClient with Observer, IOException, Unit] =
     for {

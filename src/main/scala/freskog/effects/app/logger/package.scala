@@ -1,5 +1,6 @@
-package freskog.effects.infra
+package freskog.effects.app
 
+import freskog.effects.app.logger.Logger
 import zio.ZIO
 
 package object logger {

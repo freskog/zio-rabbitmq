@@ -1,18 +1,18 @@
 package freskog.effects.infra.rabbitmq
 
-import zio.ZIO
+import zio.{Fiber, ZIO}
 
-package object observer {
+package object observer extends Observer.Service[Observer] {
 
-  val eventService: ZIO[Observer, Nothing, Observer.Service] =
+  val observerService: ZIO[Observer, Nothing, Observer.Service[Any]] =
     ZIO.access[Observer](_.observer)
 
   def notifyOf(event:AmqpEvent):ZIO[Observer, Nothing, Unit] =
-    ZIO.accessM[Observer](_.observer.notifyOf(event))
+    observerService >>= (_ notifyOf event)
 
-  def listenTo[R](handler:AmqpEvent => ZIO[R, Nothing, Unit]): ZIO[R with Observer, Nothing, Unit] =
-    eventService.flatMap( _ listenTo handler)
+  override def handle[R1, E](handler: AmqpEvent => ZIO[R1, E, Unit]): ZIO[Observer with R1, E, Nothing] =
+    observerService >>= (_ handle handler)
 
-  def listenToSome[R](handler:PartialFunction[AmqpEvent, ZIO[R, Nothing, Unit]]): ZIO[R with Observer, Nothing, Unit] =
-    eventService.flatMap( _ listenToSome handler)
+  override def handleSome[R1, E](handler: PartialFunction[AmqpEvent, ZIO[R1, E, Unit]]): ZIO[Observer with R1, E, Nothing] =
+    observerService >>= (_ handleSome handler)
 }

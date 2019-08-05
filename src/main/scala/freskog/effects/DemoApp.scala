@@ -8,34 +8,25 @@ import zio._
 
 object DemoApp extends App {
 
-  type LiveEnv = ResultHandler with CalculatorCommandHandler with InfraApi
-
   val commandConsumer: ZIO[InfraApi with CalculatorCommandHandler, Nothing, Unit] =
-    handleCalculatorCommand(processCommand)
+    ZIO.environment[CalculatorCommandHandler].flatMap { env =>
+      handleCalculatorCommand(processCommand(_).provide(env))
+    }
 
   val resultConsumer: ZIO[InfraApi with ResultHandler, Nothing, Unit] =
-    handleResultEvent(processResult)
-
-  val program: ZIO[LiveEnv, Nothing, Unit] =
+    ZIO.environment[ResultHandler] >>= { env =>
+      handleResultEvent(processResult(_).provide(env))
+    }
+  val program: ZIO[InfraApi with CalculatorCommandHandler with ResultHandler, Nothing, Unit] =
     commandConsumer zipParRight resultConsumer
 
-  val defaultConnectionFactory: UIO[ConnectionFactory] =
-    ZIO
-      .effectTotal(new ConnectionFactory)
-      .tap(disableAutorecovery)
-      .tap(disableTopologyRecovery)
-
-  def liveEnv(cf: ConnectionFactory): ZIO[Any, Nothing, LiveEnv] =
-    for {
-      api           <- InfraApi.makeLiveInfraApi(cf)
-      publishResult =  ResultPublisher.fromPublishFn(api.infraApi.publishResultEvent)
-      cmdHandler    <- CalculatorCommandHandler.makeLiveCalculatorCommandHandler(publishResult)
-      resultHandler <- ResultHandler.makeLiveResultHandler
-    } yield new CalculatorCommandHandler with ResultHandler with InfraApi {
-      override val calculatorCommandHandler: CalculatorCommandHandler.Service = cmdHandler.calculatorCommandHandler
-      override val infraApi: InfraApi.Service                                 = api.infraApi
-      override val resultEventHandler: ResultHandler.Service                  = resultHandler.resultEventHandler
-    }
+  val defaultConnectionFactory: ZManaged[Any, Nothing, ConnectionFactory] =
+    ZManaged.fromEffect(
+      ZIO
+        .effectTotal(new ConnectionFactory)
+        .tap(disableAutorecovery)
+        .tap(disableTopologyRecovery)
+    )
 
   def disableAutorecovery(cf: ConnectionFactory): UIO[Unit] =
     ZIO.effectTotal(cf.setAutomaticRecoveryEnabled(false))
@@ -44,6 +35,6 @@ object DemoApp extends App {
     ZIO.effectTotal(cf.setTopologyRecoveryEnabled(false))
 
   override def run(args: List[String]): ZIO[Environment, Nothing, Int] =
-    (defaultConnectionFactory >>= liveEnv >>= program.provide) *> UIO.succeed(0)
+    (defaultConnectionFactory >>= DemoEnv.liveEnv).use(program.provide) *> UIO.succeed(0)
 
 }

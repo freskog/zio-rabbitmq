@@ -9,15 +9,21 @@ import zio._
 
 trait FakeAdminClient extends AdminClient {
 
-  val messageQueue: Queue[Option[MessageReceived]]
+  val messageQueue: Queue[String]
 
-  val seqNo: Ref[Long]
+  val receivedSeqNo: Ref[Long]
+  val publishSeqNo: Ref[Long]
 
-  private val emptyProps = new AMQP.BasicProperties.Builder().build()
-  private val none       = ""
+  def nextReceivedSeqNo: UIO[Long] = receivedSeqNo.modify(n => (n, n + 1))
+  def nextPublishSeqNo: UIO[Long]  = publishSeqNo.modify(n => (n, n + 1))
 
-  override val adminClient: AdminClient.Service =
-    new AdminClient.Service {
+  private val emptyProps  = new AMQP.BasicProperties.Builder().build()
+  private val none        = ""
+  private val consumerId  = "fakename.com"
+  private val redelivered = false
+
+  override val adminClient: AdminClient.Service[Any] =
+    new AdminClient.Service[Any] {
 
       override def exchangeDeclare(name: String, `type`: BuiltinExchangeType): ZIO[Any, IOException, ExchangeDeclared] =
         ZIO.succeed(ExchangeDeclared(name, `type`.getType))
@@ -32,13 +38,11 @@ trait FakeAdminClient extends AdminClient {
         ZIO.succeed(MessageAcked(deliveryTag, multiple))
 
       override def basicConsume(queueName: String, consumer: Consumer): ZIO[Any, IOException, ConsumerCreated] =
-        ZIO.succeed(ConsumerCreated(queueName, "fakename.com", consumer)) <* (messageQueue.take >>= {
-          case None => ZIO.unit
-          case Some(MessageReceived(tag, redelivered, payload)) =>
-            ZIO.effectTotal(
-              consumer.handleDelivery("fakename.com", new Envelope(tag, redelivered, none, none), emptyProps, payload.getBytes())
-            )
-        }).forever.fork
+        (for {
+          payload <- messageQueue.take
+          tag     <- nextReceivedSeqNo
+          _       <- ZIO.effectTotal(consumer.handleDelivery(consumerId, new Envelope(tag, redelivered, none, none), emptyProps, payload.getBytes()))
+        } yield ()).forever.fork *> ZIO.effectTotal(ConsumerCreated(queueName, consumerId))
 
       override def basicNack(deliveryTag: Long, multiple: Boolean, requeue: Boolean): ZIO[Any, IOException, MessageNacked] =
         ZIO.succeed(MessageNacked(deliveryTag, multiple, requeue))
@@ -46,10 +50,15 @@ trait FakeAdminClient extends AdminClient {
       override def basicQos(prefetchCount: Int): ZIO[Any, IOException, QosEnabled] =
         ZIO.succeed(QosEnabled(prefetchCount))
 
-      override def basicPublish(exchange: String, routingKey: String, body: Array[Byte]): ZIO[Any, IOException, MessagePublished] =
+      override def basicPublish(
+        exchange: String,
+        routingKey: String,
+        body: Array[Byte],
+        confirmed: Promise[IOException, Unit]
+      ): ZIO[Any, IOException, MessagePublished] =
         new String(body, "UTF-8") match {
           case "fake-an-error-on-publish" => ZIO.fail(new IOException("Fake error when simulating talking to broker"))
-          case payload: String            => ZIO.succeed(MessagePublished(exchange, routingKey, payload))
+          case _: String                  => nextPublishSeqNo map (MessagePublished(_, confirmed))
         }
 
       override def confirmSelect: ZIO[Any, IOException, ConfirmSelectEnabled.type] =
@@ -61,10 +70,5 @@ trait FakeAdminClient extends AdminClient {
       override def addShutdownListener(listener: ShutdownListener): ZIO[Any, Nothing, ShutdownListenerAdded] =
         UIO.succeed(ShutdownListenerAdded(listener))
 
-      override def basicGet(queueName: String): ZIO[Any, IOException, Option[MessageReceived]] =
-        messageQueue.take
-
-      override def getNextPublishSeqNo: ZIO[Any, Nothing, PublishSeqNoGenerated] =
-        seqNo.modify(n => (PublishSeqNoGenerated(n), n + 1))
     }
 }

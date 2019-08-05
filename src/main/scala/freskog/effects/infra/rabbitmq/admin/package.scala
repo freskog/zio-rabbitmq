@@ -4,50 +4,53 @@ import java.io.IOException
 
 import com.rabbitmq.client.{ BuiltinExchangeType, ConfirmListener, ShutdownListener, Consumer => RConsumer }
 import freskog.effects.infra.rabbitmq.observer._
-import zio.ZIO
+import zio.{ Promise, ZIO, ZManaged }
 
-package object admin {
+package object admin extends AdminClient.Service[AdminClient] {
 
-  val adminClientService: ZIO[AdminClient, Nothing, admin.AdminClient.Service] =
+  val adminClientService: ZIO[AdminClient, Nothing, AdminClient.Service[Any]] =
     ZIO.access(_.adminClient)
 
+  def createAdminClient(name: String): ZManaged[ClientProvider, IOException, AdminClient] =
+    ZManaged.unwrap(ZIO.access[ClientProvider](_.adminClientProvider.createAdminClient(name)))
+
   def exchangeDeclare(name: String, `type`: BuiltinExchangeType): ZIO[AdminClient, IOException, ExchangeDeclared] =
-    ZIO.accessM[AdminClient](_.adminClient.exchangeDeclare(name, `type`))
+    adminClientService >>= (_.exchangeDeclare(name, `type`))
 
   def queueDeclare(name: String): ZIO[AdminClient, IOException, QueueDeclared] =
-    ZIO.accessM[AdminClient](_.adminClient.queueDeclare(name))
+    adminClientService >>= (_ queueDeclare name)
 
   def queueBind(queue: String, exchange: String, routingKey: String): ZIO[AdminClient, IOException, QueueBoundToExchange] =
-    ZIO.accessM[AdminClient](_.adminClient.queueBind(queue, exchange, routingKey))
-
-  def basicGet(queueName: String): ZIO[AdminClient, IOException, Option[MessageReceived]] =
-    ZIO.accessM[AdminClient](_.adminClient.basicGet(queueName))
+    adminClientService >>= (_.queueBind(queue, exchange, routingKey))
 
   def basicAck(deliveryTag: Long, multiple: Boolean): ZIO[AdminClient, IOException, MessageAcked] =
-    ZIO.accessM[AdminClient](_.adminClient.basicAck(deliveryTag, multiple))
+    adminClientService >>= (_.basicAck(deliveryTag, multiple))
 
   def basicConsume(queueName: String, consumer: RConsumer): ZIO[AdminClient, IOException, ConsumerCreated] =
-    ZIO.accessM[AdminClient](_.adminClient.basicConsume(queueName, consumer))
+    adminClientService >>= (_.basicConsume(queueName, consumer))
 
   def basicNack(deliveryTag: Long, multiple: Boolean, requeue: Boolean): ZIO[AdminClient, IOException, MessageNacked] =
-    ZIO.accessM[AdminClient](_.adminClient.basicNack(deliveryTag, multiple, requeue))
+    adminClientService >>= (_.basicNack(deliveryTag, multiple, requeue))
 
-  def basicQos(prefetchCount: Int): ZIO[AdminClient, IOException, QosEnabled] =
-    ZIO.accessM[AdminClient](_.adminClient.basicQos(prefetchCount))
+  def basicQos(prefetchCount: Int): ZIO[AdminClient, IOException, QosEnabled] = {
+    adminClientService >>= (_ basicQos prefetchCount)
+  }
 
-  def basicPublish(exchange: String, routingKey: String, body: Array[Byte]): ZIO[AdminClient, IOException, MessagePublished] =
-    ZIO.accessM[AdminClient](_.adminClient.basicPublish(exchange, routingKey, body))
+  def basicPublish(
+    exchange: String,
+    routingKey: String,
+    body: Array[Byte],
+    confirmed: Promise[IOException, Unit]
+  ): ZIO[AdminClient, IOException, MessagePublished] =
+    adminClientService >>= (_.basicPublish(exchange, routingKey, body, confirmed))
 
   def addConfirmListener(listener: ConfirmListener): ZIO[AdminClient, Nothing, ConfirmListenerAdded] =
-    ZIO.accessM[AdminClient](_.adminClient.addConfirmListener(listener))
+    adminClientService >>= (_ addConfirmListener listener)
 
   def addShutdownListener(listener: ShutdownListener): ZIO[AdminClient, Nothing, ShutdownListenerAdded] =
-    ZIO.accessM[AdminClient](_.adminClient.addShutdownListener(listener))
+    adminClientService >>= (_ addShutdownListener listener)
 
   def confirmSelect: ZIO[AdminClient, IOException, ConfirmSelectEnabled.type] =
-    ZIO.accessM[AdminClient](_.adminClient.confirmSelect)
-
-  def getNextPublishSeqNo: ZIO[AdminClient, Nothing, PublishSeqNoGenerated] =
-    ZIO.accessM[AdminClient](_.adminClient.getNextPublishSeqNo)
+    adminClientService >>= (_.confirmSelect)
 
 }

@@ -10,7 +10,7 @@ object ResultFormatter {
     def formatComputedTotal(value: Int): String
   }
 
-  trait Live extends ResultFormatter {
+  val createResultFormatter: ResultFormatter = new ResultFormatter {
     override val formatter: Service =
       new Service {
         override def formatIncrementedTo(value: Int): String =

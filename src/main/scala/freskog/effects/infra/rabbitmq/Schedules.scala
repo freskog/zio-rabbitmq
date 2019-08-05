@@ -3,11 +3,10 @@ package freskog.effects.infra.rabbitmq
 import java.io.IOException
 import java.util.concurrent.TimeUnit
 
-import freskog.effects.infra.logger._
+import freskog.effects.app.logger.{ Logger, _ }
 import freskog.effects.infra.rabbitmq.observer.MessageReceived
-import zio.console.{ putStrLn, Console }
 import zio.duration.Duration
-import zio.{ Cause, Schedule, UIO, ZSchedule }
+import zio.{ Cause, Schedule, ZIO, ZSchedule }
 
 object Schedules {
 
@@ -23,7 +22,7 @@ object Schedules {
   val everyMinute: Schedule[Cause[IOException], Int]                         = spaced(Duration(1, TimeUnit.MINUTES))
   val cappedExponential: ZSchedule[Any, Cause[IOException], (Duration, Int)] = exponentialStartingAt500ms || everyMinute
 
-  def restartFiber(component: String): ZSchedule[Logger, Cause[IOException], Unit] =
+  def loggingRetries(component: String): ZSchedule[Logger, Cause[IOException], Unit] =
     logBefore(component) *> cappedExponential.logOutput[Logger](logAfter(component)).unit
 
   def logBefore(component: String): ZSchedule[Logger, Cause[IOException], Cause[IOException]] =
@@ -34,8 +33,8 @@ object Schedules {
       case c                  => warn(s"$component terminated with unknown cause, full trace is ${c.prettyPrint}")
     }
 
-  def logAfter(name: String): ((Duration, Int)) => UIO[Unit] = {
-    case (d, n) => putStrLn(s"Offset ${d.asScala.toCoarsest}, attempting restart of $name (retry #$n)").provide(Console.Live)
+  def logAfter(name: String): ((Duration, Int)) => ZIO[Logger, Nothing, Unit] = {
+    case (d, n) => warn(s"Offset ${d.asScala.toCoarsest}, attempting restart of $name (retry #$n)")
   }
 
 }

@@ -2,14 +2,14 @@ package freskog.effects.domain
 
 import zio.{ Ref, ZIO }
 
-package object calculator {
+package object calculator extends Calculator.Service[Calculator] {
 
-  val calculatorService: ZIO[Calculator, Nothing, Calculator.Service] =
+  val calculatorService: ZIO[Calculator, Nothing, Calculator.Service[Any]] =
     ZIO.access[Calculator](_.calculator)
 
   def incrementByOne(state: Ref[Int]): ZIO[Calculator, Nothing, Int] =
-    ZIO.accessM[Calculator](_.calculator.incrementByOne(state))
+    calculatorService >>= (_ incrementByOne state)
 
   def computeCurrentValue(state: Ref[Int]): ZIO[Calculator, Nothing, Int] =
-    ZIO.accessM[Calculator](_.calculator.computeCurrentValue(state))
+    calculatorService >>= (_ computeCurrentValue state)
 }

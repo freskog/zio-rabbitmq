@@ -1,9 +1,9 @@
 package freskog.effects.app.services.results
 
-import freskog.effects.app.dto.{ ComputedTotal, IncrementedTo, ResultEvent }
+import freskog.effects.app.dto.{ComputedTotal, IncrementedTo, ResultEvent}
 import freskog.effects.domain.formatter._
-import freskog.effects.infra.logger._
-import zio.{ UIO, ZIO }
+import freskog.effects.app.logger._
+import zio.{UIO, ZIO}
 
 trait ResultHandler extends Serializable {
   val resultEventHandler: ResultHandler.Service
@@ -15,11 +15,11 @@ object ResultHandler extends Serializable {
     def processResult(ev: ResultEvent): UIO[Unit]
   }
 
-  val makeLiveResultHandler: UIO[ResultHandler] =
-    Logger.makeLogger("ResultHandler").map { log =>
-      new ResultHandler with Logger with ResultFormatter.Live { env =>
+  val createResultHandler: ZIO[Logger with ResultFormatter, Nothing, ResultHandler] =
+    ZIO.environment[Logger with ResultFormatter] map { env =>
+      new ResultHandler with Logger {
         override val resultEventHandler: ResultHandler.Service = processResult(_).provide(env)
-        override val logger: Logger.Service                    = log.logger
+        override val logger: Logger.Service = env.logger
       }
     }
 

@@ -2,11 +2,14 @@ package freskog.effects.infra.api
 
 import com.rabbitmq.client.ConnectionFactory
 import freskog.effects.app.dto.{ CalculatorCommand, ResultEvent }
-import freskog.effects.infra.logger._
+import freskog.effects.app.logger.{ Logger, _ }
 import freskog.effects.infra.rabbitmq.TopologyDeclaration
+import freskog.effects.infra.rabbitmq.admin.ClientProvider
 import freskog.effects.infra.rabbitmq.consumer._
 import freskog.effects.infra.rabbitmq.publisher._
-import zio.ZIO
+import zio.blocking.Blocking
+import zio.clock.Clock
+import zio.{ UIO, ZIO }
 
 trait InfraApi extends Serializable {
   val infraApi: InfraApi.Service
@@ -15,28 +18,28 @@ trait InfraApi extends Serializable {
 object InfraApi extends Serializable {
 
   trait Service extends Serializable {
-    def handleCalculatorCommand[R1, E](cmd: CalculatorCommand => ZIO[R1, E, Unit]): ZIO[R1, E, Unit]
+    def handleCalculatorCommand(cmd: CalculatorCommand => UIO[Unit]): UIO[Unit]
 
-    def handleResultEvent[R1, E](ev: ResultEvent => ZIO[R1, E, Unit]): ZIO[R1, E, Unit]
+    def handleResultEvent(ev: ResultEvent => UIO[Unit]): UIO[Unit]
 
-    def publishResultEvent(ev: ResultEvent): ZIO[Any, Nothing, Unit]
+    def publishResultEvent(ev: ResultEvent): UIO[Unit]
   }
 
-  def makeLiveInfraApi(cf: ConnectionFactory): ZIO[Any, Nothing, InfraApi] =
+  val makeLiveInfraApi: ZIO[Logger with Clock with Blocking with ClientProvider, Nothing, InfraApi] =
     for {
       declaredTopology <- TopologyDeclaration.topology.orDie
-      commandConsumer  <- Consumer.makeCallbackConsumer(cf, TopologyDeclaration.commandQueue, declaredTopology)
-      resultConsumer   <- Consumer.makePollingConsumer(cf, TopologyDeclaration.resultQueue, declaredTopology)
-      resultPublisher  <- Publisher.makePublisherWithConfirms(cf, TopologyDeclaration.resultExchange, declaredTopology)
-      loggerEnv        <- Logger.makeLogger("InfraAPI")
+      commandConsumer  <- Consumer.createConsumer(declaredTopology, TopologyDeclaration.commandQueue)
+      resultConsumer   <- Consumer.createConsumer(declaredTopology, TopologyDeclaration.resultQueue)
+      resultPublisher  <- Publisher.createPublisher(declaredTopology, TopologyDeclaration.resultExchange)
+      loggerEnv        <- ZIO.environment[Logger]
     } yield new InfraApi {
       override val infraApi: Service =
         new Service {
-          override def handleCalculatorCommand[R1, E](handleCmd: CalculatorCommand => ZIO[R1, E, Unit]): ZIO[R1, E, Unit] =
-            commandConsumer.consumer.consumeUsing(CalculatorCommand.fromString(_).fold(warn(_).provide(loggerEnv), handleCmd))
+          override def handleCalculatorCommand(handleCmd: CalculatorCommand => UIO[Unit]): UIO[Unit] =
+            commandConsumer.consumer.consume(CalculatorCommand.fromString(_).fold(warn(_).provide(loggerEnv), handleCmd))
 
-          override def handleResultEvent[R1, E](handleEv: ResultEvent => ZIO[R1, E, Unit]): ZIO[R1, E, Unit] =
-            resultConsumer.consumer.consumeUsing(ResultEvent.fromString(_).fold(warn(_).provide(loggerEnv), handleEv))
+          override def handleResultEvent(handleEv: ResultEvent => UIO[Unit]): UIO[Unit] =
+            resultConsumer.consumer.consume(ResultEvent.fromString(_).fold(warn(_).provide(loggerEnv), handleEv))
 
           override def publishResultEvent(ev: ResultEvent): ZIO[Any, Nothing, Unit] =
             resultPublisher.publisher.publishMessage(ev.toString).catchAll(throwable(_).provide(loggerEnv))

@@ -6,10 +6,10 @@ import zio._
 
 package object publisher {
 
-  val publisherService: ZIO[Publisher, Nothing, Publisher.Service] =
+  val publisherService: ZIO[Publisher, Nothing, Publisher.Service[Any]] =
     ZIO.access[Publisher](_.publisher)
 
   def publishMessage(msg: String): ZIO[Publisher, IOException, Unit] =
-    ZIO.accessM[Publisher](_.publisher.publishMessage(msg))
+    publisherService >>= (_ publishMessage msg)
 
 }

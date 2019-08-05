@@ -1,13 +1,14 @@
 package freskog.effects.infra.rabbitmq
 
-import zio.ZIO
+import zio.{UIO, ZIO}
 
-package object consumer {
+package object consumer extends Consumer.Service[Consumer] {
 
-  val consumerService: ZIO[Consumer, Nothing, Consumer.Service] =
+  val consumerService: ZIO[Consumer, Nothing, Consumer.Service[Any]] =
     ZIO.access(_.consumer)
 
-  def consumeUsing[R, E](userFunction: String => ZIO[R, E, Unit]): ZIO[R with Consumer, E, Unit] =
-    ZIO.access[Consumer](_.consumer.consumeUsing(userFunction)).flatten
+  def consume(userFunction: String => UIO[Unit]): ZIO[Consumer, Nothing, Unit] = {
+    consumerService >>= (_ consume userFunction)
+  }
 
 }

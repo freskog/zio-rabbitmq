@@ -1,22 +1,12 @@
 package freskog.effects.infra.logger
 
-import zio._
-import zio.clock._
-import zio.console._
+import freskog.effects.app.logger.Logger
+import freskog.effects.app.logger.Logger.Service
+import zio.{UIO, ZIO}
+import zio.clock.Clock
+import zio.console.Console
 
-trait Logger extends Serializable {
-  val logger: Logger.Service
-}
-
-object Logger extends Serializable {
-  trait Service extends Serializable {
-    def debug(msg: String): UIO[Unit]
-    def info(msg: String): UIO[Unit]
-    def warn(msg: String): UIO[Unit]
-    def error(msg: String): UIO[Unit]
-    def throwable(t: Throwable): UIO[Unit]
-  }
-
+object LiveLogger {
   def makeLogger(name: String): UIO[Logger] =
     UIO.effectTotal(org.slf4j.LoggerFactory.getLogger(name)).map { log =>
       new Logger with Console.Live with Clock.Live {
