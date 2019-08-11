@@ -1,9 +1,8 @@
-package freskog.effects.infra.rabbitmq
+package freskog.effects.infra.rabbitmq.admin
 
 import java.io.IOException
 
 import com.rabbitmq.client._
-import freskog.effects.infra.rabbitmq.admin._
 import freskog.effects.infra.rabbitmq.observer._
 import zio._
 

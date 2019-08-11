@@ -3,15 +3,15 @@ package freskog.effects.app.logger
 import zio._
 
 trait Logger extends Serializable {
-  val logger: Logger.Service
+  val logger: Logger.Service[Any]
 }
 
 object Logger extends Serializable {
-  trait Service extends Serializable {
-    def debug(msg: String): UIO[Unit]
-    def info(msg: String): UIO[Unit]
-    def warn(msg: String): UIO[Unit]
-    def error(msg: String): UIO[Unit]
-    def throwable(t: Throwable): UIO[Unit]
+  trait Service[R] extends Serializable {
+    def debug(msg: String): ZIO[R, Nothing, Unit]
+    def info(msg: String): ZIO[R, Nothing, Unit]
+    def warn(msg: String): ZIO[R, Nothing, Unit]
+    def error(msg: String): ZIO[R, Nothing, Unit]
+    def throwable(t: Throwable): ZIO[R, Nothing, Unit]
   }
 }

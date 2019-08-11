@@ -1,11 +1,10 @@
 package freskog.effects.app
 
-import freskog.effects.app.logger.Logger
 import zio.ZIO
 
-package object logger {
+package object logger extends Logger.Service[Logger] {
 
-  val loggerService: ZIO[Logger, Nothing, Logger.Service] =
+  val loggerService: ZIO[Logger, Nothing, Logger.Service[Any]] =
     ZIO.access[Logger](_.logger)
 
   def debug(msg:String):ZIO[Logger, Nothing, Unit] =

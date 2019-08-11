@@ -11,8 +11,8 @@ object LiveLogger {
     UIO.effectTotal(org.slf4j.LoggerFactory.getLogger(name)).map { log =>
       new Logger with Console.Live with Clock.Live {
 
-        override val logger: Service =
-          new Service {
+        override val logger: Service[Any] =
+          new Service[Any] {
             override def debug(msg: String): UIO[Unit] =
               fmtString(msg) >>= (str => UIO.effectTotal(log.debug(str)))
 

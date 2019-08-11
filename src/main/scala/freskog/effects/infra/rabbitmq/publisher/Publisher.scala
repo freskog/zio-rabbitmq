@@ -3,6 +3,7 @@ package freskog.effects.infra.rabbitmq.publisher
 import java.io.IOException
 
 import freskog.effects.app.logger.Logger
+import freskog.effects.infra.rabbitmq.AmqpLogger
 import freskog.effects.infra.rabbitmq.admin.ClientProvider
 import freskog.effects.infra.rabbitmq.observer.Observer
 import freskog.effects.infra.rabbitmq.topology._
@@ -23,13 +24,12 @@ object Publisher extends Serializable {
     for {
       observerEnv <- Observer.makeObserver
       outsideEnv  <- ZIO.environment[ClientProvider with Logger with Clock]
-      pfn <- LivePublisher
-              .publishMessage(topology, exchange)
+      pfn <- (AmqpLogger.logEvents(s"E: $exchange") *> LivePublisher.publishMessage(topology, exchange))
               .provide(
                 new Observer with ClientProvider with Logger with Clock {
                   override val observer: Observer.Service[Any]                   = observerEnv.observer
                   override val adminClientProvider: ClientProvider.Provider[Any] = outsideEnv.adminClientProvider
-                  override val logger: Logger.Service                            = outsideEnv.logger
+                  override val logger: Logger.Service[Any]                       = outsideEnv.logger
                   override val clock: Clock.Service[Any]                         = outsideEnv.clock
                 }
               )

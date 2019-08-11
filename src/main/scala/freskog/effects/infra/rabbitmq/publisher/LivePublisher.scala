@@ -13,16 +13,12 @@ import zio.clock.Clock
 
 object LivePublisher {
 
-  def publishMessage(
-    topology: Declaration,
-    exchange: String
-  ): ZIO[Observer with ClientProvider with Logger with Clock, Nothing, String => IO[IOException, Unit]] =
+  type PublisherEnv = Observer with ClientProvider with Logger with Clock
+
+  def publishMessage(topology: Declaration, exchange: String): ZIO[PublisherEnv, Nothing, String => IO[IOException, Unit]] =
     publishFiber(topology, exchange) *> ZIO.environment[Observer] map (env => publishFn(exchange)(_).provide(env))
 
-  def publishFiber(
-    topology: Declaration,
-    exchange: String
-  ): ZIO[Observer with ClientProvider with Logger with Clock, Nothing, Fiber[Nothing, Nothing]] =
+  def publishFiber(topology: Declaration, exchange: String): ZIO[PublisherEnv, Nothing, Fiber[Nothing, Nothing]] =
     ClientFactory
       .buildClientsFor(exchange)
       .use(initializePublisherOn(topology, exchange).provide)

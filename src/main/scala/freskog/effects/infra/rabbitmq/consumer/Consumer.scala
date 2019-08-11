@@ -1,6 +1,7 @@
 package freskog.effects.infra.rabbitmq.consumer
 
 import freskog.effects.app.logger.Logger
+import freskog.effects.infra.rabbitmq.AmqpLogger
 import freskog.effects.infra.rabbitmq.admin.ClientProvider
 import freskog.effects.infra.rabbitmq.observer.Observer
 import freskog.effects.infra.rabbitmq.topology._
@@ -23,19 +24,16 @@ object Consumer extends Serializable {
       observerEnv <- Observer.makeObserver
     } yield new Consumer {
       override val consumer: Service[Any] =
-        new Service[Any] {
-          override def consume(userFunction: String => UIO[Unit]): UIO[Unit] =
-            LiveConsumer
-              .consume(topology, queueName)(userFunction)
-              .provide(
-                new Clock with Logger with Observer with ClientProvider {
-                  override val clock: Clock.Service[Any]                         = outsideEnv.clock
-                  override val logger: Logger.Service                            = outsideEnv.logger
-                  override val observer: Observer.Service[Any]                   = observerEnv.observer
-                  override val adminClientProvider: ClientProvider.Provider[Any] = outsideEnv.adminClientProvider
-                }
-              )
-        }
+        (userFunction: String => UIO[Unit]) =>
+          (AmqpLogger.logEvents(s"Q: $queueName") *> LiveConsumer.consume(topology, queueName)(userFunction))
+            .provide(
+              new Clock with Logger with Observer with ClientProvider {
+                override val clock: Clock.Service[Any]                         = outsideEnv.clock
+                override val logger: Logger.Service[Any]                       = outsideEnv.logger
+                override val observer: Observer.Service[Any]                   = observerEnv.observer
+                override val adminClientProvider: ClientProvider.Provider[Any] = outsideEnv.adminClientProvider
+              }
+            )
     }
 
 }

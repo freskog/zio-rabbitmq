@@ -19,7 +19,7 @@ object ResultHandler extends Serializable {
     ZIO.environment[Logger with ResultFormatter] map { env =>
       new ResultHandler with Logger {
         override val resultEventHandler: ResultHandler.Service = processResult(_).provide(env)
-        override val logger: Logger.Service = env.logger
+        override val logger: Logger.Service[Any] = env.logger
       }
     }
 

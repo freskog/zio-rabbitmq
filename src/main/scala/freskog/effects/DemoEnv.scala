@@ -36,7 +36,7 @@ object DemoEnv {
     ZManaged
       .fromEffect(ResultHandler.createResultHandler)
       .provide(new Logger with ResultFormatter {
-        override val logger: Logger.Service             = loggerEnv.logger
+        override val logger: Logger.Service[Any]        = loggerEnv.logger
         override val formatter: ResultFormatter.Service = formatterEnv.formatter
       })
 
@@ -44,15 +44,15 @@ object DemoEnv {
     ZManaged
       .fromEffect(CalculatorCommandHandler.createCalculatorCommandHandler)
       .provide(new ResultPublisher with Calculator {
-        override val resultPublisher: ResultPublisher.Service = publishResult.resultPublisher
-        override val calculator: Calculator.Service[Any]      = calculatorEnv.calculator
+        override val resultPublisher: ResultPublisher.Service[Any] = publishResult.resultPublisher
+        override val calculator: Calculator.Service[Any]           = calculatorEnv.calculator
       })
 
   def buildInfraApi(loggerEnv: Logger, blockingEnv: Blocking, clockEnv: Clock, clientP: ClientProvider): ZManaged[Any, Nothing, InfraApi] =
     ZManaged
       .fromEffect(InfraApi.makeLiveInfraApi)
       .provide(new Logger with Clock with Blocking with ClientProvider {
-        override val logger: Logger.Service                            = loggerEnv.logger
+        override val logger: Logger.Service[Any]                       = loggerEnv.logger
         override val clock: Clock.Service[Any]                         = clockEnv.clock
         override val adminClientProvider: ClientProvider.Provider[Any] = clientP.adminClientProvider
         override val blocking: Blocking.Service[Any]                   = blockingEnv.blocking
@@ -62,7 +62,7 @@ object DemoEnv {
     ClientProvider
       .createLiveAdminClientProvider(cf)
       .provide(new Logger with Blocking {
-        override val logger: Logger.Service          = loggerEnv.logger
+        override val logger: Logger.Service[Any]     = loggerEnv.logger
         override val blocking: Blocking.Service[Any] = blockingEnv.blocking
       })
 
