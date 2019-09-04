@@ -52,10 +52,15 @@ scalacOptions ++= Seq(
   "-Ywarn-value-discard"               // Warn when non-Unit expression results are unused.
 )
 
+val zioVersion = "1.0.0-RC12-1"
+
+testFrameworks += new TestFramework("zio.test.sbt.ZTestFramework")
+
 libraryDependencies ++= Seq(
-  "dev.zio" %% "zio" % "1.0.0-RC11-1",
-  "dev.zio" %% "zio-streams" % "1.0.0-RC11-1",
-  "dev.zio" %% "zio-test" % "1.0.0-RC11-1" % "test",
+  "dev.zio" %% "zio" % zioVersion,
+  "dev.zio" %% "zio-streams" % zioVersion,
+  "dev.zio" %% "zio-test" % zioVersion % "test",
+  "dev.zio" %% "zio-test-sbt" % zioVersion % "test",
   "com.rabbitmq" % "amqp-client" % "5.7.1",
   "ch.qos.logback" % "logback-classic" % "1.2.3"
 )

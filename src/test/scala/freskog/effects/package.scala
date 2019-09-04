@@ -1,14 +1,13 @@
 package freskog
 
 import freskog.effects.app.dto.ResultEvent
-import freskog.effects.app.logger.{FakeLogger, LogLevel}
+import freskog.effects.app.logger.{ FakeLogger, LogLevel }
 import freskog.effects.app.services.commands.FakeResultPublisher
 import freskog.effects.domain.calculator.Calculator
 import freskog.effects.domain.formatter.ResultFormatter
 import zio.ZIO
 import zio.blocking.Blocking
-import zio.scheduler.Scheduler
-import zio.test.mock.{MockClock, MockConsole, MockRandom, MockSystem}
+import zio.test.mock.{ MockClock, MockConsole, MockRandom, MockSystem }
 
 package object effects {
 
@@ -16,7 +15,6 @@ package object effects {
     with MockClock
     with MockConsole
     with MockRandom
-    with Scheduler
     with MockSystem
     with ResultFormatter
     with FakeLogger
@@ -28,4 +26,7 @@ package object effects {
 
   val getLastPublishedResultEvent: ZIO[FakeResultPublisher, Nothing, Option[ResultEvent]] =
     ZIO.accessM[FakeResultPublisher](_.getLastPublishedResultEvent)
+
+  val allPublishedResultEvents: ZIO[FakeResultPublisher, Nothing, List[ResultEvent]] =
+    ZIO.accessM[FakeResultPublisher](_.allPublishedResultEvents)
 }

@@ -75,24 +75,18 @@ object LivePublisher {
     new IOException(s"Message $tag was nacked")
 
   def addTag(tag: Long, promise: Promise[IOException, Unit], inflight: RefM[Map[Long, Promise[IOException, Unit]]]): UIO[Unit] =
-    inflight.update[Any, Nothing](m => ZIO.succeedLazy(m.updated(tag, promise))).unit
+    inflight.update[Any, Nothing](m => ZIO.effectTotal(m.updated(tag, promise))).unit
 
   def forSmallerThan(tag: Long, inflight: RefM[Map[Long, Promise[IOException, Unit]]])(f: Promise[IOException, Unit] => UIO[Boolean]): UIO[Unit] =
     inflight.update { m =>
       val tags = m.keys.filter(_ <= tag)
-      ZIO.foreach_(tags) { tag =>
-        m.get(tag).fold(ZIO.unit)(f andThen (_.unit))
-      } *> ZIO.succeedLazy(m -- tags)
+      ZIO.foreach_(tags)(tag => m.get(tag).fold(ZIO.unit)(f andThen (_.unit))) *> ZIO.effectTotal(m -- tags)
     }.unit
 
   def forAllTags(inflight: RefM[Map[Long, Promise[IOException, Unit]]])(f: Promise[IOException, Unit] => UIO[Boolean]): UIO[Unit] =
-    inflight.update { m =>
-      ZIO.foreach_(m.keys) { tag =>
-        m.get(tag).fold(ZIO.unit)(f andThen (_.unit))
-      } *> ZIO.succeedLazy(Map.empty)
-    }.unit
+    inflight.update(m => ZIO.foreach_(m.keys)(tag => m.get(tag).fold(ZIO.unit)(f andThen (_.unit))) *> ZIO.effectTotal(Map.empty)).unit
 
   def forTag(tag: Long, inflight: RefM[Map[Long, Promise[IOException, Unit]]])(f: Promise[IOException, Unit] => UIO[Boolean]): UIO[Unit] =
-    inflight.update(m => m.get(tag).fold(ZIO.unit)(f andThen (_.unit)) *> ZIO.succeedLazy(m - tag)).unit
+    inflight.update(m => m.get(tag).fold(ZIO.unit)(f andThen (_.unit)) *> ZIO.effectTotal(m - tag)).unit
 
 }

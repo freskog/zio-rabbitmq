@@ -10,6 +10,9 @@ trait FakeResultPublisher extends ResultPublisher {
   lazy val getLastPublishedResultEvent: ZIO[Any, Nothing, Option[ResultEvent]] =
     publishedResultEvents.get.map(_.headOption)
 
+  lazy val allPublishedResultEvents: ZIO[Any, Nothing, List[ResultEvent]] =
+    publishedResultEvents.get
+
   override val resultPublisher: ResultPublisher.Service[Any] =
     (ev: ResultEvent) => publishedResultEvents.update(ev :: _).unit
 }

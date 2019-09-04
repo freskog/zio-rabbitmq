@@ -6,19 +6,19 @@ import freskog.effects.app.logger._
 import zio.{UIO, ZIO}
 
 trait ResultHandler extends Serializable {
-  val resultEventHandler: ResultHandler.Service
+  val resultEventHandler: ResultHandler.Service[Any]
 }
 
-object ResultHandler extends Serializable {
+object ResultHandler {
 
-  trait Service extends Serializable {
-    def processResult(ev: ResultEvent): UIO[Unit]
+  trait Service[R] {
+    def processResult(ev: ResultEvent): ZIO[R, Nothing, Unit]
   }
 
   val createResultHandler: ZIO[Logger with ResultFormatter, Nothing, ResultHandler] =
     ZIO.environment[Logger with ResultFormatter] map { env =>
       new ResultHandler with Logger {
-        override val resultEventHandler: ResultHandler.Service = processResult(_).provide(env)
+        override val resultEventHandler: ResultHandler.Service[Any] = processResult(_).provide(env)
         override val logger: Logger.Service[Any] = env.logger
       }
     }

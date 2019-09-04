@@ -5,14 +5,14 @@ import freskog.effects.domain.calculator._
 import zio.{ Ref, ZIO }
 
 trait CalculatorCommandHandler extends Serializable {
-  val calculatorCommandHandler: CalculatorCommandHandler.Service
+  val calculatorCommandHandler: CalculatorCommandHandler.Service[Any]
 }
 
 object CalculatorCommandHandler extends Serializable {
   self =>
 
-  trait Service extends Serializable {
-    def processCommand(command: CalculatorCommand): ZIO[Any, Nothing, Unit]
+  trait Service[R] {
+    def processCommand(command: CalculatorCommand): ZIO[R, Nothing, Unit]
   }
 
   def createCalculatorCommandHandler: ZIO[ResultPublisher with Calculator, Nothing, CalculatorCommandHandler] =
@@ -20,7 +20,7 @@ object CalculatorCommandHandler extends Serializable {
       state <- Ref.make[Int](0)
       env   <- ZIO.environment[ResultPublisher with Calculator]
     } yield new CalculatorCommandHandler {
-      override val calculatorCommandHandler: Service = (command: CalculatorCommand) => self.processCommand(state)(command).provide(env)
+      override val calculatorCommandHandler: Service[Any] = (command: CalculatorCommand) => self.processCommand(state)(command).provide(env)
     }
 
   def processCommand(state: Ref[Int]): CalculatorCommand => ZIO[Calculator with ResultPublisher, Nothing, Unit] = {

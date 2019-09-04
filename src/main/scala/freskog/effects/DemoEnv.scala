@@ -27,9 +27,9 @@ object DemoEnv {
       cmdHandler    <- buildCalculatorCmdHandler(calculatorEnv, publishResult)
       resultHandler <- buildResultHandler(loggerEnv, formatterEnv)
     } yield new ResultHandler with CalculatorCommandHandler with InfraApi {
-      override val resultEventHandler: ResultHandler.Service                  = resultHandler.resultEventHandler
-      override val calculatorCommandHandler: CalculatorCommandHandler.Service = cmdHandler.calculatorCommandHandler
-      override val infraApi: InfraApi.Service                                 = api.infraApi
+      override val resultEventHandler: ResultHandler.Service[Any]                  = resultHandler.resultEventHandler
+      override val calculatorCommandHandler: CalculatorCommandHandler.Service[Any] = cmdHandler.calculatorCommandHandler
+      override val infraApi: InfraApi.Service                                      = api.infraApi
     }
 
   def buildResultHandler(loggerEnv: Logger, formatterEnv: ResultFormatter): ZManaged[Any, Nothing, ResultHandler] =

@@ -3,7 +3,7 @@ package freskog.effects.app.services
 import freskog.effects.app.dto.{CalculatorCommand, ResultEvent}
 import zio.ZIO
 
-package object commands {
+package object commands extends CalculatorCommandHandler.Service[CalculatorCommandHandler] {
 
   def processCommand(command: CalculatorCommand): ZIO[CalculatorCommandHandler, Nothing, Unit] =
     ZIO.accessM[CalculatorCommandHandler](_.calculatorCommandHandler.processCommand(command))

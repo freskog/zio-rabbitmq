@@ -15,7 +15,7 @@ object AmqpLogger {
     case e @ SubscriberCancelledByBroker(_)  => warn(s"$name - $e")
     case e @ ConsumerShutdownReceived(_, _)  => warn(s"$name - $e")
     case e @ PublisherShutdownReceived(_, _) => warn(s"$name - $e")
-    case e @ AmqpError(_)                    => warn(s"$name - $e")
+    case e @ AmqpError(_)                    => error(s"$name - $e")
     case e: AmqpEvent                        => info(s"$name - $e")
   }.fork.unit
 
